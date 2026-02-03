@@ -83,7 +83,7 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
         video: { 
           width: 640, 
           height: 480, 
-          frameRate: 15 // Lower framerate for bandwidth
+          frameRate: 24
         } 
       });
       streamRef.current = mediaStream;
@@ -164,7 +164,6 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
             // Handle Tools
             if (msg.toolCall) {
                 for (const fc of msg.toolCall.functionCalls) {
-                    // CRITICAL UPDATE: Pass the actual result back to the model
                     const result = await onToolCall(fc.name, fc.args);
                     sessionPromise.then(session => {
                         session.sendToolResponse({
@@ -218,7 +217,7 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
             }
         });
 
-      }, 1000); // 1 FPS for efficiency
+      }, 500); // 2 FPS (500ms) for better responsiveness
 
       return () => {
          clearInterval(videoInterval);

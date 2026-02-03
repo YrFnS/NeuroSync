@@ -3,7 +3,7 @@ import { AppMode, NeuroState, ActionType, EnvironmentalEvent } from './types';
 import { LiquidDisplay } from './components/LiquidDisplay';
 import { useLiveSession } from './hooks/useLiveSession';
 import { useGeolocation } from './hooks/useGeolocation';
-import { Mic, MicOff, Power, Share2, Activity, Play, Square, AlertOctagon } from 'lucide-react';
+import { Mic, MicOff, Power, Share2, Activity, Play, Square, AlertOctagon, Radio } from 'lucide-react';
 
 // --- State Management ---
 // Initialize state from localStorage if available
@@ -41,7 +41,7 @@ function reducer(state: NeuroState, action: ActionType): NeuroState {
         guardianData: {
             ...state.guardianData,
             eventLog: [
-                { id: Date.now().toString(), timestamp: Date.now(), type: 'HAZARD_DETECTED', description: action.payload },
+                { id: Date.now().toString(), timestamp: Date.now(), type: 'HAZARD_DETECTED', description: action.payload, coordinates: state.guardianData.location },
                 ...state.guardianData.eventLog
             ]
         }
@@ -57,11 +57,17 @@ function reducer(state: NeuroState, action: ActionType): NeuroState {
         } 
       };
     case 'LOG_EVENT':
+      // Generate a coordinate near the user if location is known, or default to 0,0
+      const baseLat = state.guardianData.location?.lat || 0;
+      const baseLng = state.guardianData.location?.lng || 0;
+      // Add slight jitter to simulate precise object location nearby
+      const jitter = () => (Math.random() - 0.5) * 0.0002; 
+      
       const newEvent: EnvironmentalEvent = {
           id: Date.now().toString(),
           timestamp: Date.now(),
           ...action.payload,
-          coordinates: { x: Math.random() * 80 + 10, y: Math.random() * 80 + 10 } // Simulating map placement
+          coordinates: baseLat !== 0 ? { lat: baseLat + jitter(), lng: baseLng + jitter() } : undefined
       };
       return {
           ...state,
@@ -144,16 +150,14 @@ const App: React.FC = () => {
     
     else if (name === 'queryMemory') {
       const query = args.query.toLowerCase();
-      // Search the event log in the current state
       const memories = stateRef.current.guardianData.eventLog.filter(e => 
         e.description.toLowerCase().includes(query) || 
         e.type.toLowerCase().includes(query)
       );
       
-      // Return the found memories to Gemini
       return { 
         found: memories.length > 0, 
-        memories: memories.slice(0, 5) // Limit to 5 most recent matches
+        memories: memories.slice(0, 5) 
       };
     }
     
@@ -185,68 +189,73 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="h-screen w-screen bg-black text-white overflow-hidden flex flex-col font-sans">
+    <div className="h-screen w-screen bg-black text-white overflow-hidden flex flex-col font-sans relative">
       
-      {/* Top Bar (Sticky) */}
-      <header className="absolute top-0 left-0 w-full p-4 flex justify-between items-center z-50 bg-gradient-to-b from-black/80 to-transparent">
-         <div className="flex items-center gap-2">
-            <Activity className={`text-${isConnected ? 'green' : 'gray'}-500`} size={20} />
-            <span className="font-mono font-bold tracking-widest text-sm">NEUROSYNC v1.0</span>
+      {/* Top Floating Status Bar */}
+      <div className="absolute top-4 left-4 z-50 flex items-center gap-3 animate-in slide-in-from-top duration-500">
+         <div className={`flex items-center gap-2 px-3 py-1 rounded-full border ${isConnected ? 'border-green-500/50 bg-green-500/10' : 'border-gray-700 bg-gray-800/50'} backdrop-blur-md`}>
+            <Activity className={`${isConnected ? 'text-green-500 animate-pulse' : 'text-gray-500'}`} size={14} />
+            <span className={`font-mono text-[10px] tracking-widest ${isConnected ? 'text-green-500' : 'text-gray-500'}`}>
+                {isConnected ? 'LIVE_LINK_ACTIVE' : 'OFFLINE'}
+            </span>
          </div>
-         <button 
+      </div>
+
+      {/* SOS Button (Top Right) */}
+      <button 
            onClick={() => dispatch({ type: 'ACTIVATE_GUARDIAN' })}
-           className="bg-red-500/20 text-red-500 border border-red-500 px-3 py-1 rounded-full text-xs font-bold animate-pulse hover:bg-red-500 hover:text-white transition-colors"
-         >
-           SOS
-         </button>
-      </header>
+           className="absolute top-4 right-4 z-50 bg-red-600/20 text-red-500 border border-red-500 px-4 py-2 rounded-none skew-x-[-10deg] text-xs font-black animate-pulse hover:bg-red-600 hover:text-white transition-colors"
+      >
+           <span className="skew-x-[10deg] block tracking-widest">SOS // PANIC</span>
+      </button>
 
       {/* Main Liquid Interface */}
-      <main className="flex-1 relative">
+      <main className="flex-1 relative z-0">
          <LiquidDisplay state={state} />
       </main>
 
-      {/* Bottom Controls */}
-      <footer className="absolute bottom-0 left-0 w-full p-6 pb-10 flex justify-center items-end bg-gradient-to-t from-black via-black/90 to-transparent pointer-events-none">
-        <div className="pointer-events-auto flex items-center gap-6">
-           {/* Connection Toggle */}
+      {/* Bottom Floating Controls */}
+      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-6 pointer-events-none">
+           {/* Main Power Button */}
            <button 
              onClick={toggleConnection}
-             className={`w-20 h-20 rounded-full flex items-center justify-center border-4 transition-all duration-300 shadow-2xl ${isConnected ? 'border-green-500 bg-green-500/10' : 'border-gray-600 bg-gray-800'}`}
+             className={`pointer-events-auto w-24 h-24 rounded-full flex items-center justify-center border-[6px] transition-all duration-500 shadow-[0_0_30px_rgba(0,0,0,0.5)] active:scale-90 ${
+                isConnected 
+                ? 'border-[#00FF94] bg-[#00FF94]/10 shadow-[0_0_40px_rgba(0,255,148,0.4)]' 
+                : 'border-white/10 bg-white/5 hover:border-white/30'
+             }`}
            >
-             <Power size={32} className={isConnected ? "text-green-500 shadow-green-500 drop-shadow-lg" : "text-gray-400"} />
+             <Power size={36} className={`${isConnected ? "text-[#00FF94]" : "text-white/30"}`} />
            </button>
-        </div>
-      </footer>
+      </div>
 
       {/* DEBUG / SIMULATOR PANEL */}
-      <div className="fixed top-20 right-4 z-50">
-          <button onClick={() => setShowDebug(!showDebug)} className="text-xs text-gray-700 bg-gray-900 p-1 border border-gray-800 rounded">
-            {showDebug ? 'Hide Sim' : 'Simulate'}
+      <div className="fixed top-20 right-4 z-[60]">
+          <button onClick={() => setShowDebug(!showDebug)} className="text-[10px] text-gray-500 hover:text-white uppercase tracking-widest">
+            {showDebug ? '[ - ]' : '[ + ] SIM'}
           </button>
       </div>
 
       {showDebug && (
-        <div className="fixed top-28 right-4 w-64 bg-gray-900/90 backdrop-blur border border-gray-700 p-4 rounded-xl text-xs z-50 shadow-2xl">
-          <h3 className="font-bold mb-2 text-white">NeuroSync Simulator</h3>
-          <p className="mb-2 text-gray-400">Force Gemini states without API cost.</p>
+        <div className="fixed top-28 right-4 w-64 bg-black/90 backdrop-blur-xl border border-gray-800 p-4 rounded-none text-xs z-[60] shadow-2xl font-mono">
+          <h3 className="font-bold mb-4 text-white border-b border-gray-800 pb-2">DEV_OVERRIDE</h3>
           
           <div className="grid grid-cols-2 gap-2 mb-4">
-             <button onClick={() => dispatch({ type: 'UPDATE_NAV', payload: { direction: 'STRAIGHT', distance: '10m' }})} className="bg-slate-700 p-2 rounded text-white hover:bg-slate-600">Nav: Straight</button>
-             <button onClick={() => dispatch({ type: 'UPDATE_NAV', payload: { direction: 'LEFT', distance: 'Turn Now' }})} className="bg-slate-700 p-2 rounded text-white hover:bg-slate-600">Nav: Left</button>
-             <button onClick={() => dispatch({ type: 'UPDATE_READ', payload: { text: "MENU: 1. Latte $4  2. Espresso $3" }})} className="bg-slate-700 p-2 rounded text-white hover:bg-slate-600">Read Mode</button>
-             <button onClick={() => dispatch({ type: 'UPDATE_SCAN', payload: { objectName: "Campbell's Soup", details: "Tomato, 10oz can" }})} className="bg-slate-700 p-2 rounded text-white hover:bg-slate-600">Scan Object</button>
-             <button onClick={() => dispatch({ type: 'TRIGGER_DANGER', payload: "Open Manhole Ahead" })} className="col-span-2 bg-red-900/50 border border-red-500 text-red-200 p-2 rounded hover:bg-red-800">Trigger Danger</button>
-             <button onClick={() => dispatch({ type: 'LOG_EVENT', payload: { type: 'OBJECT_SEEN', description: "Keys placed on table" }})} className="col-span-2 bg-blue-900/50 border border-blue-500 text-blue-200 p-2 rounded hover:bg-blue-800">Sim Memory: Keys</button>
+             <button onClick={() => dispatch({ type: 'UPDATE_NAV', payload: { direction: 'STRAIGHT', distance: '10m' }})} className="bg-slate-800 p-2 text-gray-300 hover:text-white hover:bg-slate-700 transition-colors">NAV: FWD</button>
+             <button onClick={() => dispatch({ type: 'UPDATE_NAV', payload: { direction: 'LEFT', distance: 'Turn Now' }})} className="bg-slate-800 p-2 text-gray-300 hover:text-white hover:bg-slate-700 transition-colors">NAV: LEFT</button>
+             <button onClick={() => dispatch({ type: 'UPDATE_READ', payload: { text: "MENU: 1. Latte $4  2. Espresso $3" }})} className="bg-slate-800 p-2 text-gray-300 hover:text-white hover:bg-slate-700 transition-colors">READ</button>
+             <button onClick={() => dispatch({ type: 'UPDATE_SCAN', payload: { objectName: "Campbell's Soup", details: "Tomato, 10oz can" }})} className="bg-slate-800 p-2 text-gray-300 hover:text-white hover:bg-slate-700 transition-colors">SCAN</button>
+             <button onClick={() => dispatch({ type: 'TRIGGER_DANGER', payload: "Open Manhole Ahead" })} className="col-span-2 bg-red-900/20 border border-red-900 text-red-500 p-2 hover:bg-red-900/40 transition-colors">! DANGER !</button>
+             <button onClick={() => dispatch({ type: 'LOG_EVENT', payload: { type: 'OBJECT_SEEN', description: "Keys placed on table" }})} className="col-span-2 bg-blue-900/20 border border-blue-900 text-blue-500 p-2 hover:bg-blue-900/40 transition-colors">LOG MEMORY</button>
           </div>
 
-          <div className="border-t border-gray-700 pt-2">
-            <label className="block text-gray-500 mb-1">API Key Override</label>
+          <div className="border-t border-gray-800 pt-2">
+            <label className="block text-gray-600 mb-1">API_KEY</label>
             <input 
               type="password" 
               value={apiKey} 
               onChange={(e) => setApiKey(e.target.value)} 
-              className="w-full bg-black border border-gray-600 rounded p-1 text-white"
+              className="w-full bg-black border border-gray-800 rounded-none p-2 text-white focus:border-white outline-none"
               placeholder="sk-..."
             />
           </div>

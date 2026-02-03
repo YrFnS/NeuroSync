@@ -28,7 +28,7 @@ export interface EnvironmentalEvent {
   timestamp: number;
   type: 'OBJECT_SEEN' | 'HAZARD_DETECTED' | 'LOCATION_CHANGE';
   description: string;
-  coordinates?: { x: number, y: number }; // Relative map coordinates for visualization
+  coordinates?: { lat: number; lng: number }; 
 }
 
 export interface GuardianData {
