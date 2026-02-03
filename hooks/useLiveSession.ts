@@ -62,6 +62,18 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
   const nextStartTimeRef = useRef<number>(0);
   const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
 
+  // Capture current frame as base64 JPEG
+  const getSnapshot = useCallback((): string | undefined => {
+      if (!canvasRef.current || !videoRef.current) return undefined;
+      const ctx = canvasRef.current.getContext('2d');
+      if (ctx) {
+          ctx.drawImage(videoRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height);
+          // Return valid data URL
+          return canvasRef.current.toDataURL('image/jpeg', 0.6);
+      }
+      return undefined;
+  }, []);
+
   // Connect to Gemini
   const connect = useCallback(async () => {
     setError(null);
@@ -233,5 +245,5 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
     }
   };
 
-  return { connect, disconnect, isConnected, isStreaming, videoStream, error };
+  return { connect, disconnect, isConnected, isStreaming, videoStream, error, getSnapshot };
 };

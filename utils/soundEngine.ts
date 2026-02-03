@@ -1,17 +1,14 @@
 // A pure Web Audio API synthesizer for sci-fi interface sounds
-// No external MP3s required.
+// Now with 3D Spatial Audio (Stereo Panning)
 
 class SoundEngine {
     private ctx: AudioContext | null = null;
     private masterGain: GainNode | null = null;
+    private panner: StereoPannerNode | null = null;
     private sonarInterval: number | null = null;
   
     constructor() {
-      // Initialize on first user interaction to handle autoplay policies
-      if (typeof window !== 'undefined') {
-        // We defer initialization until the first interaction usually, 
-        // but for this demo we'll try to init lazily
-      }
+      // Defer initialization
     }
   
     private init() {
@@ -20,23 +17,51 @@ class SoundEngine {
         this.ctx = new AudioCtx();
         this.masterGain = this.ctx.createGain();
         this.masterGain.gain.value = 0.3; // Prevent ear blasting
+        
+        // Add Spatial Panner
+        if (this.ctx.createStereoPanner) {
+            this.panner = this.ctx.createStereoPanner();
+            this.panner.pan.value = 0; // Center
+            this.panner.connect(this.masterGain);
+        } else {
+            // Fallback for older browsers (though unlikely in modern PWA context)
+        }
+        
         this.masterGain.connect(this.ctx.destination);
       }
       if (this.ctx?.state === 'suspended') {
         this.ctx.resume();
       }
     }
+
+    /**
+     * Sets the spatial position of the audio.
+     * @param panValue -1 (Left) to 1 (Right). 0 is Center.
+     */
+    public setPan(panValue: number) {
+        this.init();
+        if (this.panner) {
+            // Smooth transition to avoid clicking
+            this.panner.pan.setTargetAtTime(panValue, this.ctx!.currentTime, 0.1);
+        }
+    }
   
-    // Plays a futuristic "Mode Switch" sound
     public playModeSwitch() {
       this.init();
       if (!this.ctx || !this.masterGain) return;
+      // Reset pan to center for UI sounds
+      this.setPan(0);
   
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
       
       osc.connect(gain);
-      gain.connect(this.masterGain);
+      // Connect to panner if available, else master
+      if (this.panner) {
+        gain.connect(this.panner);
+      } else {
+        gain.connect(this.masterGain);
+      }
   
       osc.type = 'sine';
       osc.frequency.setValueAtTime(400, this.ctx.currentTime);
@@ -51,16 +76,17 @@ class SoundEngine {
       osc.stop(this.ctx.currentTime + 0.3);
     }
   
-    // Plays a harsh "Danger" alarm
     public playDangerAlarm() {
       this.init();
       if (!this.ctx || !this.masterGain) return;
+      this.setPan(0); // Center alert
   
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
       
       osc.connect(gain);
-      gain.connect(this.masterGain);
+      if (this.panner) gain.connect(this.panner);
+      else gain.connect(this.masterGain);
   
       osc.type = 'sawtooth';
       osc.frequency.setValueAtTime(150, this.ctx.currentTime);
@@ -73,20 +99,21 @@ class SoundEngine {
       osc.stop(this.ctx.currentTime + 0.4);
     }
   
-    // Plays a pleasant "Success/Found" chime
     public playSuccess() {
       this.init();
       if (!this.ctx || !this.masterGain) return;
+      this.setPan(0);
   
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
       
       osc.connect(gain);
-      gain.connect(this.masterGain);
+      if (this.panner) gain.connect(this.panner);
+      else gain.connect(this.masterGain);
   
       osc.type = 'triangle';
-      osc.frequency.setValueAtTime(880, this.ctx.currentTime); // A5
-      osc.frequency.setValueAtTime(1108, this.ctx.currentTime + 0.1); // C#6
+      osc.frequency.setValueAtTime(880, this.ctx.currentTime); 
+      osc.frequency.setValueAtTime(1108, this.ctx.currentTime + 0.1); 
       
       gain.gain.setValueAtTime(0, this.ctx.currentTime);
       gain.gain.linearRampToValueAtTime(0.5, this.ctx.currentTime + 0.05);
@@ -97,12 +124,12 @@ class SoundEngine {
     }
   
     // Starts a rhythmic clicking (Sonar) for navigation
-    // Speed increases as distance decreases (simulated by passing 'intensity' 0-1)
+    // Speed increases as distance decreases
     public startSonar(intensity: number = 0.5) {
       this.init();
       if (this.sonarInterval) clearInterval(this.sonarInterval);
   
-      const intervalMs = Math.max(100, 1000 - (intensity * 900)); // 1000ms (slow) to 100ms (fast)
+      const intervalMs = Math.max(100, 1000 - (intensity * 900)); 
       
       this.sonarInterval = window.setInterval(() => {
         if (!this.ctx || !this.masterGain) return;
@@ -111,7 +138,9 @@ class SoundEngine {
         const gain = this.ctx.createGain();
         
         osc.connect(gain);
-        gain.connect(this.masterGain);
+        // Important: Connect to panner so clicking moves with direction
+        if (this.panner) gain.connect(this.panner);
+        else gain.connect(this.masterGain);
   
         osc.frequency.setValueAtTime(2000, this.ctx.currentTime);
         gain.gain.setValueAtTime(0.1, this.ctx.currentTime);

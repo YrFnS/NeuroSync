@@ -32,7 +32,8 @@ function reducer(state: NeuroState, action: ActionType): NeuroState {
     case 'UPDATE_SCAN':
       return { ...state, mode: AppMode.SCANNING, scanData: action.payload };
     case 'TRIGGER_DANGER':
-      if (navigator.vibrate) navigator.vibrate([500, 100, 500]);
+      // Haptic Pattern: SOS (Short Short Short, Long Long Long, Short Short Short)
+      if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 100, 200, 500, 200, 500, 200, 500, 200, 100, 50, 100, 50, 100]);
       return { 
         ...state, 
         mode: AppMode.DANGER, 
@@ -106,12 +107,32 @@ const App: React.FC = () => {
     localStorage.setItem('neurosync_memory', JSON.stringify(state.guardianData.eventLog));
   }, [state.guardianData.eventLog]);
 
+  // Sound & Haptics Engine Control
   useEffect(() => {
     soundEngine.stopSonar();
+    
     if (state.mode === AppMode.NAVIGATION) {
        const distStr = state.navData?.distance || "";
+       const direction = state.navData?.direction;
+       
+       // Calculate intensity for sonar speed
        let intensity = 0.2;
        if (distStr.includes("1m") || distStr.includes("2m")) intensity = 0.9;
+       
+       // SPATIAL AUDIO MAPPING
+       if (direction === 'LEFT') {
+         soundEngine.setPan(-0.8); // Pan Left
+         if (navigator.vibrate) navigator.vibrate([100, 50, 100]); // Haptic: Double tap
+       } else if (direction === 'RIGHT') {
+         soundEngine.setPan(0.8); // Pan Right
+         if (navigator.vibrate) navigator.vibrate([100, 50, 100]); // Haptic: Double tap
+       } else if (direction === 'STOP') {
+         soundEngine.setPan(0);
+         if (navigator.vibrate) navigator.vibrate([500]); // Haptic: Long buzz
+       } else {
+         soundEngine.setPan(0); // Straight/Center
+       }
+
        soundEngine.startSonar(intensity);
     } 
     else if (state.mode === AppMode.DANGER) {
@@ -123,7 +144,15 @@ const App: React.FC = () => {
     else if (state.mode !== AppMode.IDLE && state.mode !== AppMode.GUARDIAN) {
        soundEngine.playModeSwitch();
     }
-  }, [state.mode, state.navData?.distance]);
+  }, [state.mode, state.navData?.distance, state.navData?.direction]);
+  
+  const handleTranscript = (text: string) => {};
+
+  // Tool Call Handler
+  // We need access to getSnapshot from the hook, but hooks can't be called inside callback directly if it wasn't returned yet.
+  // We will pass the handler to useLiveSession, but useLiveSession returns getSnapshot.
+  // Solution: Use a ref to store getSnapshot when it becomes available.
+  const getSnapshotRef = useRef<() => string | undefined>(() => undefined);
 
   const handleToolCall = useCallback(async (name: string, args: any) => {
     if (name !== 'logEnvironmentalEvent' && name !== 'queryMemory') {
@@ -155,8 +184,11 @@ const App: React.FC = () => {
       return { success: true };
     }
     else if (name === 'logEnvironmentalEvent') {
-      dispatch({ type: 'LOG_EVENT', payload: { type: args.type, description: args.description } });
-      return { success: true, message: "Event logged to memory." };
+      // CAPTURE SNAPSHOT OF THE MEMORY
+      const snapshot = getSnapshotRef.current();
+      dispatch({ type: 'LOG_EVENT', payload: { type: args.type, description: args.description, snapshot } });
+      soundEngine.playSuccess(); // Audio confirmation
+      return { success: true, message: "Event logged to memory with visual evidence." };
     } 
     else if (name === 'queryMemory') {
       const query = args.query.toLowerCase();
@@ -169,12 +201,15 @@ const App: React.FC = () => {
     return { status: "unknown_tool" };
   }, []);
 
-  const handleTranscript = (text: string) => {};
-
-  const { connect, disconnect, isConnected, videoStream, error } = useLiveSession({
+  const { connect, disconnect, isConnected, videoStream, error, getSnapshot } = useLiveSession({
     onToolCall: handleToolCall,
     onTranscript: handleTranscript
   });
+
+  // Keep ref updated
+  useEffect(() => {
+      getSnapshotRef.current = getSnapshot;
+  }, [getSnapshot]);
 
   const toggleConnection = () => {
     if (isConnected) {

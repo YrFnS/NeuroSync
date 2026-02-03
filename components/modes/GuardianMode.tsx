@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ShieldAlert, Radio, Share2, Check, Copy, Video, X, MapPin, Footprints, AlertTriangle, ArrowRightCircle } from 'lucide-react';
+import { ShieldAlert, Radio, Share2, Check, Copy, Video, X, MapPin, Footprints, AlertTriangle, ArrowRightCircle, Image as ImageIcon } from 'lucide-react';
 import { NeuroState } from '../../types';
 import L from 'leaflet';
 
@@ -86,9 +86,14 @@ export const GuardianMode: React.FC<Props> = ({ data, videoStream, onExit }) => 
     data.eventLog.forEach(event => {
         if (event.coordinates) {
             const icon = event.type === 'HAZARD_DETECTED' ? hazardIcon : objectIcon;
-            L.marker([event.coordinates.lat, event.coordinates.lng], { icon })
-             .bindPopup(`<b>${event.type}</b><br>${event.description}`)
+            const marker = L.marker([event.coordinates.lat, event.coordinates.lng], { icon })
              .addTo(markersRef.current);
+            
+            let popupContent = `<b>${event.type}</b><br>${event.description}`;
+            if (event.snapshot) {
+                popupContent += `<br><img src="${event.snapshot}" style="width:100px; margin-top:5px; border:1px solid white;">`;
+            }
+            marker.bindPopup(popupContent);
         }
     });
   }, [data.location, data.eventLog]);
@@ -187,19 +192,26 @@ export const GuardianMode: React.FC<Props> = ({ data, videoStream, onExit }) => 
                 </div>
             </div>
 
-            {/* Event Log */}
-            <div className="bg-slate-800/80 p-3 rounded-lg border border-slate-700 h-48 flex flex-col shrink-0">
+            {/* Event Log with Thumbnails */}
+            <div className="bg-slate-800/80 p-3 rounded-lg border border-slate-700 h-64 flex flex-col shrink-0">
                 <h3 className="text-gray-400 font-mono text-xs mb-2 flex items-center gap-2 border-b border-slate-700 pb-2">
                   <Radio size={14} className="text-green-500" /> SYSTEM_LOG
                 </h3>
-                <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
                    {data.eventLog.map((event) => (
-                      <div key={event.id} className="flex gap-2 text-xs font-mono">
-                         <span className="text-slate-500 shrink-0">{new Date(event.timestamp).toLocaleTimeString()}</span>
-                         <span className={`${event.type === 'HAZARD_DETECTED' ? 'text-red-400' : 'text-green-400'} font-bold`}>
-                            [{event.type}]
-                         </span>
-                         <span className="text-slate-300 truncate">{event.description}</span>
+                      <div key={event.id} className="flex gap-2 text-xs font-mono items-start bg-black/20 p-2 rounded">
+                         {event.snapshot && (
+                            <img src={event.snapshot} alt="Evidence" className="w-12 h-12 object-cover rounded border border-slate-600 shrink-0" />
+                         )}
+                         <div className="flex flex-col">
+                            <div className="flex gap-2">
+                                <span className="text-slate-500">{new Date(event.timestamp).toLocaleTimeString()}</span>
+                                <span className={`${event.type === 'HAZARD_DETECTED' ? 'text-red-400' : 'text-green-400'} font-bold`}>
+                                    [{event.type}]
+                                </span>
+                            </div>
+                            <span className="text-slate-300 mt-1">{event.description}</span>
+                         </div>
                       </div>
                    ))}
                 </div>

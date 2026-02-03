@@ -35,7 +35,8 @@ export interface EnvironmentalEvent {
   timestamp: number;
   type: 'OBJECT_SEEN' | 'HAZARD_DETECTED' | 'LOCATION_CHANGE';
   description: string;
-  coordinates?: { lat: number; lng: number }; 
+  coordinates?: { lat: number; lng: number };
+  snapshot?: string; // Base64 image string of the event
 }
 
 export interface GuardianData {
