@@ -94,6 +94,15 @@ const App: React.FC = () => {
   const [showDebug, setShowDebug] = useState(false);
   const { location } = useGeolocation();
   
+  // App Mount Announcement
+  useEffect(() => {
+     // Small delay to ensure browser interaction policies are met or waiting for user first interaction
+     const timer = setTimeout(() => {
+         soundEngine.speakSystem("NeuroSync Systems Online. Double tap bottom center to activate.");
+     }, 1000);
+     return () => clearTimeout(timer);
+  }, []);
+  
   const stateRef = useRef(state);
   useEffect(() => { stateRef.current = state; }, [state]);
 
@@ -137,6 +146,7 @@ const App: React.FC = () => {
     } 
     else if (state.mode === AppMode.DANGER) {
        soundEngine.playDangerAlarm();
+       soundEngine.speakSystem("DANGER. STOP.");
     }
     else if (state.mode === AppMode.SCANNING) {
        soundEngine.playSuccess();
@@ -148,10 +158,6 @@ const App: React.FC = () => {
   
   const handleTranscript = (text: string) => {};
 
-  // Tool Call Handler
-  // We need access to getSnapshot from the hook, but hooks can't be called inside callback directly if it wasn't returned yet.
-  // We will pass the handler to useLiveSession, but useLiveSession returns getSnapshot.
-  // Solution: Use a ref to store getSnapshot when it becomes available.
   const getSnapshotRef = useRef<() => string | undefined>(() => undefined);
 
   const handleToolCall = useCallback(async (name: string, args: any) => {
@@ -177,6 +183,7 @@ const App: React.FC = () => {
     } 
     else if (name === 'activateGuardian') {
       dispatch({ type: 'ACTIVATE_GUARDIAN' });
+      soundEngine.speakSystem("Guardian Protocol Initiated. Help is on the way.");
       return { success: true };
     } 
     else if (name === 'provideEmergencyPlan') {
@@ -213,15 +220,18 @@ const App: React.FC = () => {
 
   const toggleConnection = () => {
     if (isConnected) {
+      soundEngine.speakSystem("Disconnecting.");
       disconnect();
     } else {
       if (!process.env.API_KEY && !apiKey) {
+        soundEngine.speakSystem("Error. API Key missing.");
         alert("Please set API_KEY in env or use the debug panel.");
         return;
       }
       if (!process.env.API_KEY && apiKey) {
         process.env.API_KEY = apiKey;
       }
+      soundEngine.speakSystem("Connecting to Gemini Live.");
       soundEngine.playModeSwitch();
       connect();
     }
@@ -232,9 +242,13 @@ const App: React.FC = () => {
       
       {/* Header - Safe Area Top */}
       <div className="absolute top-0 left-0 w-full p-2 pt-safe z-50 flex justify-between pointer-events-none items-start">
-         <div className={`pointer-events-auto flex items-center gap-2 px-3 py-2 md:px-4 md:py-3 rounded-xl border-4 ${isConnected ? 'border-[#FFD600] bg-black text-[#FFD600]' : 'border-gray-600 bg-gray-900 text-gray-400'} mt-2 ml-2`}>
+         <div 
+            className={`pointer-events-auto flex items-center gap-2 px-3 py-2 md:px-4 md:py-3 rounded-xl border-4 ${isConnected ? 'border-[#FFD600] bg-black text-[#FFD600]' : 'border-gray-600 bg-gray-900 text-gray-400'} mt-2 ml-2`}
+            role="status"
+            aria-live="polite"
+         >
             <Activity className={`${isConnected ? 'animate-pulse' : ''}`} size={20} strokeWidth={4} />
-            <span className="font-bold text-base md:text-lg tracking-wider" aria-live="polite">
+            <span className="font-bold text-base md:text-lg tracking-wider">
                 {isConnected ? 'LIVE' : 'OFF'}
             </span>
          </div>
@@ -242,7 +256,7 @@ const App: React.FC = () => {
          <button 
            onClick={() => dispatch({ type: 'ACTIVATE_GUARDIAN' })}
            className="pointer-events-auto bg-[#FF4D00] text-white border-4 border-white px-4 py-2 md:px-6 md:py-3 rounded-xl font-black text-lg md:text-xl animate-pulse hover:bg-red-600 active:scale-95 shadow-xl flex items-center gap-2 mt-2 mr-2"
-           aria-label="Emergency Help"
+           aria-label="Emergency Help Button. Double tap to activate Guardian Mode."
          >
            <ShieldAlert size={24} strokeWidth={4} /> HELP
          </button>
@@ -250,7 +264,7 @@ const App: React.FC = () => {
 
       {/* Permission Error Banner */}
       {error && (
-         <div className="absolute top-24 left-4 right-4 z-50 bg-[#FF4D00] text-white p-4 rounded-xl border-4 border-white flex items-center gap-4 animate-bounce">
+         <div className="absolute top-24 left-4 right-4 z-50 bg-[#FF4D00] text-white p-4 rounded-xl border-4 border-white flex items-center gap-4 animate-bounce" role="alert">
             <AlertOctagon size={48} strokeWidth={3} />
             <div>
                <h2 className="text-2xl font-black uppercase">System Error</h2>
@@ -260,7 +274,7 @@ const App: React.FC = () => {
       )}
 
       {/* Main Content */}
-      <main className="flex-1 relative z-0 h-full w-full" role="main" aria-live="assertive">
+      <main className="flex-1 relative z-0 h-full w-full" role="main" aria-live="polite">
          <LiquidDisplay 
             state={state} 
             videoStream={videoStream} 
@@ -273,12 +287,12 @@ const App: React.FC = () => {
         <div className="absolute bottom-6 pb-safe left-1/2 -translate-x-1/2 z-50 flex items-center justify-center w-full pointer-events-none">
              <button 
                onClick={toggleConnection}
-               className={`pointer-events-auto w-24 h-24 md:w-32 md:h-32 rounded-full flex items-center justify-center border-[6px] md:border-[8px] transition-all duration-200 active:scale-90 ${
+               className={`pointer-events-auto w-24 h-24 md:w-32 md:h-32 rounded-full flex items-center justify-center border-[6px] md:border-[8px] transition-all duration-200 active:scale-90 shadow-2xl ${
                   isConnected 
                   ? 'border-white bg-[#FFD600] text-black shadow-[0_0_50px_rgba(255,214,0,0.8)]' 
                   : 'border-gray-500 bg-gray-800 text-gray-400'
                }`}
-               aria-label={isConnected ? "Stop NeuroSync" : "Start NeuroSync"}
+               aria-label={isConnected ? "System Active. Double tap to Stop." : "System Idle. Double tap to Start NeuroSync."}
                title={isConnected ? "Stop" : "Start"}
              >
                <Power size={40} className="md:w-14 md:h-14" strokeWidth={4} />

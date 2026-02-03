@@ -1,11 +1,12 @@
 // A pure Web Audio API synthesizer for sci-fi interface sounds
-// Now with 3D Spatial Audio (Stereo Panning)
+// Now with 3D Spatial Audio (Stereo Panning) & Native TTS
 
 class SoundEngine {
     private ctx: AudioContext | null = null;
     private masterGain: GainNode | null = null;
     private panner: StereoPannerNode | null = null;
     private sonarInterval: number | null = null;
+    private synth: SpeechSynthesis = window.speechSynthesis;
   
     constructor() {
       // Defer initialization
@@ -32,6 +33,21 @@ class SoundEngine {
       if (this.ctx?.state === 'suspended') {
         this.ctx.resume();
       }
+    }
+
+    /**
+     * Speaks a system message using the device's native TTS.
+     * This is distinct from the AI voice, used for system status.
+     */
+    public speakSystem(text: string) {
+        if (this.synth.speaking) {
+            this.synth.cancel();
+        }
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 1.2; // Slightly faster for efficiency
+        utterance.pitch = 1.0;
+        utterance.volume = 1.0;
+        this.synth.speak(utterance);
     }
 
     /**
