@@ -56,4 +56,5 @@ export type ActionType =
   | { type: 'ACTIVATE_GUARDIAN' }
   | { type: 'ADD_TRANSCRIPT'; payload: string }
   | { type: 'LOG_EVENT'; payload: Omit<EnvironmentalEvent, 'id' | 'timestamp'> }
+  | { type: 'UPDATE_LOCATION'; payload: { lat: number; lng: number } }
   | { type: 'SET_STREAMING'; payload: boolean };

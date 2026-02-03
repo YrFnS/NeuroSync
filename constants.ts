@@ -9,6 +9,7 @@ Your goal is to guide the user safely and intelligently.
 1. **PASSIVE AWARENESS**: Constantly scan the environment. If you see the user place an important object (wallet, keys, phone) down, use the 'logEnvironmentalEvent' tool to remember it.
 2. **ACTIVE GUIDANCE**: Change the interface mode based on user activity.
 3. **SAFETY FIRST**: Immediate hazards trigger 'triggerDanger'.
+4. **MEMORY RECALL**: If the user asks "Where is my [object]?", use 'queryMemory' to check your logs before answering.
 
 **MODES:**
 - **NAVIGATION**: Moving through space. Give clear directions.
@@ -16,9 +17,6 @@ Your goal is to guide the user safely and intelligently.
 - **SCANNING**: Holding up an object for inspection. Describe it.
 - **DANGER**: Immediate threat.
 - **GUARDIAN**: Emergency mode.
-
-**MEMORY:**
-If the user asks "Where is my [object]?", check your context or previous logs.
 
 Be concise. Speak clearly. Prioritize safety.
 `;
@@ -95,6 +93,20 @@ export const TOOLS: FunctionDeclaration[] = [
         }
       },
       required: ['type', 'description']
+    }
+  },
+  {
+    name: 'queryMemory',
+    description: 'Retrieves past events from memory to answer user questions about object locations.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        query: {
+          type: Type.STRING,
+          description: 'The object or event to search for (e.g., "wallet", "keys").'
+        }
+      },
+      required: ['query']
     }
   }
 ];

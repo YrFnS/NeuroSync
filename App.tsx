@@ -1,13 +1,24 @@
-import React, { useReducer, useState, useCallback, useEffect } from 'react';
+import React, { useReducer, useState, useCallback, useEffect, useRef } from 'react';
 import { AppMode, NeuroState, ActionType, EnvironmentalEvent } from './types';
 import { LiquidDisplay } from './components/LiquidDisplay';
 import { useLiveSession } from './hooks/useLiveSession';
+import { useGeolocation } from './hooks/useGeolocation';
 import { Mic, MicOff, Power, Share2, Activity, Play, Square, AlertOctagon } from 'lucide-react';
 
 // --- State Management ---
+// Initialize state from localStorage if available
+const loadMemory = (): EnvironmentalEvent[] => {
+  try {
+    const stored = localStorage.getItem('neurosync_memory');
+    return stored ? JSON.parse(stored) : [];
+  } catch (e) {
+    return [];
+  }
+};
+
 const initialState: NeuroState = {
   mode: AppMode.IDLE,
-  guardianData: { active: false, transcript: [], eventLog: [] },
+  guardianData: { active: false, transcript: [], eventLog: loadMemory() },
   isAudioStreaming: false,
 };
 
@@ -22,7 +33,6 @@ function reducer(state: NeuroState, action: ActionType): NeuroState {
     case 'UPDATE_SCAN':
       return { ...state, mode: AppMode.SCANNING, scanData: action.payload };
     case 'TRIGGER_DANGER':
-      // Haptic feedback logic here if supported
       if (navigator.vibrate) navigator.vibrate([500, 100, 500]);
       return { 
         ...state, 
@@ -60,6 +70,14 @@ function reducer(state: NeuroState, action: ActionType): NeuroState {
               eventLog: [newEvent, ...state.guardianData.eventLog]
           }
       };
+    case 'UPDATE_LOCATION':
+      return {
+          ...state,
+          guardianData: {
+              ...state.guardianData,
+              location: action.payload
+          }
+      };
     default:
       return state;
   }
@@ -69,13 +87,30 @@ const App: React.FC = () => {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [apiKey, setApiKey] = useState(process.env.API_KEY || '');
   const [showDebug, setShowDebug] = useState(false);
+  const { location } = useGeolocation();
+  
+  // Ref to access current state inside callbacks without triggering re-renders of the hook
+  const stateRef = useRef(state);
+  useEffect(() => { stateRef.current = state; }, [state]);
+
+  // Sync Location to State
+  useEffect(() => {
+    if (location) {
+        dispatch({ type: 'UPDATE_LOCATION', payload: location });
+    }
+  }, [location]);
+
+  // Persist Memory
+  useEffect(() => {
+    localStorage.setItem('neurosync_memory', JSON.stringify(state.guardianData.eventLog));
+  }, [state.guardianData.eventLog]);
 
   // --- Tool Callbacks ---
   const handleToolCall = useCallback(async (name: string, args: any) => {
     console.log("Tool Called:", name, args);
     
-    // Log intent to guardian transcript
-    if (name !== 'logEnvironmentalEvent') {
+    // Don't log internal queries to transcript to keep it clean, or do it for debugging
+    if (name !== 'logEnvironmentalEvent' && name !== 'queryMemory') {
          dispatch({ type: 'ADD_TRANSCRIPT', payload: `ACTION: ${name} (${JSON.stringify(args)})` });
     }
 
@@ -89,22 +124,47 @@ const App: React.FC = () => {
       } else {
         dispatch({ type: 'SET_MODE', payload: AppMode.IDLE });
       }
-    } else if (name === 'triggerDanger') {
+      return { success: true };
+    } 
+    
+    else if (name === 'triggerDanger') {
       dispatch({ type: 'TRIGGER_DANGER', payload: args.hazardDescription });
-    } else if (name === 'activateGuardian') {
+      return { success: true };
+    } 
+    
+    else if (name === 'activateGuardian') {
       dispatch({ type: 'ACTIVATE_GUARDIAN' });
-    } else if (name === 'logEnvironmentalEvent') {
+      return { success: true };
+    } 
+    
+    else if (name === 'logEnvironmentalEvent') {
       dispatch({ type: 'LOG_EVENT', payload: { type: args.type, description: args.description } });
+      return { success: true, message: "Event logged to memory." };
+    } 
+    
+    else if (name === 'queryMemory') {
+      const query = args.query.toLowerCase();
+      // Search the event log in the current state
+      const memories = stateRef.current.guardianData.eventLog.filter(e => 
+        e.description.toLowerCase().includes(query) || 
+        e.type.toLowerCase().includes(query)
+      );
+      
+      // Return the found memories to Gemini
+      return { 
+        found: memories.length > 0, 
+        memories: memories.slice(0, 5) // Limit to 5 most recent matches
+      };
     }
-    return { status: "success" };
+    
+    return { status: "unknown_tool" };
   }, []);
 
   const handleTranscript = (text: string) => {
     // In a real app, we'd get transcript chunks from the Live API
-    // For now, we simulate this based on tools
   };
 
-  const { connect, disconnect, isConnected, isStreaming } = useLiveSession({
+  const { connect, disconnect, isConnected } = useLiveSession({
     onToolCall: handleToolCall,
     onTranscript: handleTranscript
   });
@@ -113,12 +173,10 @@ const App: React.FC = () => {
     if (isConnected) {
       disconnect();
     } else {
-      // Small trick to allow user to input key if not in env
       if (!process.env.API_KEY && !apiKey) {
         alert("Please set API_KEY in env or use the debug panel.");
         return;
       }
-      // Inject key for hook if missing in process.env (Simulator mode support)
       if (!process.env.API_KEY && apiKey) {
         process.env.API_KEY = apiKey;
       }
@@ -161,7 +219,7 @@ const App: React.FC = () => {
         </div>
       </footer>
 
-      {/* DEBUG / SIMULATOR PANEL (Hidden by default, toggleable) */}
+      {/* DEBUG / SIMULATOR PANEL */}
       <div className="fixed top-20 right-4 z-50">
           <button onClick={() => setShowDebug(!showDebug)} className="text-xs text-gray-700 bg-gray-900 p-1 border border-gray-800 rounded">
             {showDebug ? 'Hide Sim' : 'Simulate'}

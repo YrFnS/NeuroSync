@@ -164,13 +164,14 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
             // Handle Tools
             if (msg.toolCall) {
                 for (const fc of msg.toolCall.functionCalls) {
+                    // CRITICAL UPDATE: Pass the actual result back to the model
                     const result = await onToolCall(fc.name, fc.args);
                     sessionPromise.then(session => {
                         session.sendToolResponse({
                             functionResponses: {
                                 id: fc.id,
                                 name: fc.name,
-                                response: { result: "OK" } // Simple ACK
+                                response: { result: result } 
                             }
                         })
                     })
@@ -230,8 +231,6 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
 
   const disconnect = () => {
     if (sessionRef.current) {
-        // No explicit close on promise, handled via session if available in future SDK updates
-        // Just reload page or clear state for now as rigorous cleanup is tricky with alpha SDKs
         window.location.reload(); 
     }
   };
