@@ -10,9 +10,11 @@ import { Bookmark } from 'lucide-react';
 
 interface Props {
   state: NeuroState;
+  videoStream: MediaStream | null;
+  onExitGuardian: () => void;
 }
 
-export const LiquidDisplay: React.FC<Props> = ({ state }) => {
+export const LiquidDisplay: React.FC<Props> = ({ state, videoStream, onExitGuardian }) => {
   const [showMemoryToast, setShowMemoryToast] = useState<string | null>(null);
 
   useEffect(() => {
@@ -20,7 +22,7 @@ export const LiquidDisplay: React.FC<Props> = ({ state }) => {
       const lastEvent = state.guardianData.eventLog[0];
       if (lastEvent.type === 'OBJECT_SEEN' && state.mode !== AppMode.GUARDIAN) {
         setShowMemoryToast(lastEvent.description);
-        const timer = setTimeout(() => setShowMemoryToast(null), 4000); // Longer duration for reading
+        const timer = setTimeout(() => setShowMemoryToast(null), 4000); 
         return () => clearTimeout(timer);
       }
     }
@@ -29,9 +31,6 @@ export const LiquidDisplay: React.FC<Props> = ({ state }) => {
   return (
     <div className="w-full h-full relative overflow-hidden bg-black liquid-transition">
       
-      {/* High Contrast Frame - Provides context of screen edges */}
-      <div className="absolute inset-0 pointer-events-none z-20 border-[6px] border-white/10"></div>
-
       {/* Modes Content */}
       <div className="relative z-10 w-full h-full flex flex-col">
         {state.mode === AppMode.IDLE && <IdleMode />}
@@ -39,17 +38,23 @@ export const LiquidDisplay: React.FC<Props> = ({ state }) => {
         {state.mode === AppMode.READING && <ReadingMode data={state.readData} />}
         {state.mode === AppMode.SCANNING && <ScanningMode data={state.scanData} />}
         {state.mode === AppMode.DANGER && <DangerMode hazard={state.navData?.hazard || "Unknown Hazard"} />}
-        {state.mode === AppMode.GUARDIAN && <GuardianMode data={state.guardianData} />}
+        {state.mode === AppMode.GUARDIAN && (
+            <GuardianMode 
+                data={state.guardianData} 
+                videoStream={videoStream} 
+                onExit={onExitGuardian} 
+            />
+        )}
       </div>
 
-      {/* Memory Notification - High Contrast Block */}
+      {/* Memory Notification - High Contrast Toast */}
       {showMemoryToast && (
-        <div className="absolute top-20 left-4 right-4 z-40 bg-[#0047AB] text-white p-6 rounded-xl border-4 border-white shadow-2xl animate-in slide-in-from-top">
-           <div className="flex items-start gap-4">
-             <Bookmark size={32} className="text-[#FFD600] shrink-0" />
+        <div className="absolute top-24 left-0 right-0 z-40 p-4 animate-in slide-in-from-top">
+           <div className="bg-[#0047AB] text-white p-6 rounded-2xl border-4 border-white shadow-2xl flex items-center gap-4">
+             <Bookmark size={48} className="text-[#FFD600] shrink-0" strokeWidth={3} />
              <div>
-               <h3 className="text-sm font-bold text-[#FFD600] uppercase tracking-wider mb-1">Item Remembered</h3>
-               <p className="text-xl font-bold leading-snug">{showMemoryToast}</p>
+               <h3 className="text-lg font-bold text-[#FFD600] uppercase tracking-wider mb-1">Saved</h3>
+               <p className="text-2xl font-bold leading-snug">{showMemoryToast}</p>
              </div>
            </div>
         </div>

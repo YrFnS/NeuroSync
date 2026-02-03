@@ -30,53 +30,56 @@ export const NavigationMode: React.FC<{ data: NeuroState['navData'] }> = ({ data
     textColor = "text-black";
   }
 
-  // Parse distance numbers for massive display
+  // Parse distance numbers
   const distanceNum = data.distance.replace(/[^0-9.]/g, '');
   const distanceUnit = data.distance.replace(/[0-9.]/g, '');
 
   return (
-    <div className={`flex flex-col h-full w-full ${bgColor} ${textColor} transition-colors duration-300 relative overflow-hidden`}>
+    <div className={`flex flex-col h-full w-full ${bgColor} ${textColor} transition-colors duration-300 relative overflow-hidden pb-safe`}>
       
       {/* 
-        TOP SECTION: DISTANCE 
-        Massive typography for low vision.
+        DISTANCE DISPLAY
+        Scales with Viewport Width to ensure fit on mobile
       */}
-      <div className="h-[30%] flex items-end justify-center pb-2 z-10">
-        <p className="text-[30vh] font-bold leading-none tracking-tighter text-center flex items-baseline">
-          {distanceNum}
-          <span className="text-[10vh] ml-2 font-bold opacity-80">{distanceUnit}</span>
-        </p>
-      </div>
-
-      {/* 
-        MIDDLE SECTION: DIRECTIONAL ICON
-        Takes up majority of screen space.
-        Stroke width increased to 4 for visibility.
-      */}
-      <div className="h-[50%] flex items-center justify-center z-10">
-        <div className="pulse-heavy transform scale-150">
-           <Icon size={300} strokeWidth={4} fill="currentColor" fillOpacity={0.2} />
+      <div className="flex-1 flex items-end justify-center pb-2 md:pb-4 min-h-0">
+        <div className="flex items-baseline justify-center w-full px-2">
+          <span className="font-bold leading-none tracking-tighter text-[35vw] md:text-[35vh]">
+            {distanceNum}
+          </span>
+          <span className="font-bold opacity-70 text-[10vw] md:text-[10vh] ml-2">
+            {distanceUnit}
+          </span>
         </div>
       </div>
 
       {/* 
-        BOTTOM SECTION: INSTRUCTION LABEL
-        High contrast text anchor.
+        DIRECTIONAL ICON
+        Central, dominant, simple.
       */}
-      <div className="h-[20%] flex items-start justify-center pt-2 z-10">
-        <h1 className="text-[10vh] font-black uppercase tracking-wide text-center leading-none">{label}</h1>
+      <div className="flex-1 flex items-center justify-center min-h-0">
+        <div className="transform scale-125 md:scale-150">
+           <Icon size={180} className="md:w-[240px] md:h-[240px]" strokeWidth={5} fill="currentColor" fillOpacity={0.0} />
+        </div>
+      </div>
+
+      {/* 
+        LABEL
+        Bottom anchor.
+      */}
+      <div className="h-[15%] flex items-start justify-center pt-2 md:pt-4">
+        <h1 className="text-[12vw] md:text-[8vh] font-black uppercase tracking-wide text-center leading-none">{label}</h1>
       </div>
 
       {/* 
         HAZARD OVERLAY 
-        Overrides everything if hazard exists.
+        Simplified High Contrast Hazard
       */}
       {data.hazard && (
-        <div className="absolute inset-0 bg-[#FF4D00] flex flex-col items-center justify-center z-50 flash-danger p-8 text-center" role="alert">
-          <AlertTriangle size={180} className="mb-8 text-white" fill="black" strokeWidth={4} />
-          <h1 className="text-[12vh] font-black text-white mb-6 leading-none">STOP</h1>
-          <div className="bg-black w-full py-6 px-4 border-4 border-white rounded-xl">
-             <p className="text-4xl font-bold text-[#FFD600] uppercase">{data.hazard}</p>
+        <div className="absolute inset-0 bg-[#FF4D00] flex flex-col items-center justify-center z-50 flash-danger p-6 text-center" role="alert">
+          <AlertTriangle size={120} className="mb-4 text-black md:w-[150px] md:h-[150px]" fill="white" strokeWidth={3} />
+          <h1 className="text-[20vw] md:text-[15vh] font-black text-white mb-4 leading-none">STOP</h1>
+          <div className="bg-black w-full py-4 px-4 rounded-2xl border-4 border-white">
+             <p className="text-2xl md:text-4xl font-bold text-[#FFD600] uppercase break-words">{data.hazard}</p>
           </div>
         </div>
       )}

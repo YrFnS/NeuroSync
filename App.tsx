@@ -4,9 +4,8 @@ import { LiquidDisplay } from './components/LiquidDisplay';
 import { useLiveSession } from './hooks/useLiveSession';
 import { useGeolocation } from './hooks/useGeolocation';
 import { soundEngine } from './utils/soundEngine';
-import { Power, Activity, ShieldAlert, Settings } from 'lucide-react';
+import { Power, Activity, ShieldAlert, Settings, AlertOctagon } from 'lucide-react';
 
-// --- State Management ---
 const loadMemory = (): EnvironmentalEvent[] => {
   try {
     const stored = localStorage.getItem('neurosync_memory');
@@ -48,6 +47,8 @@ function reducer(state: NeuroState, action: ActionType): NeuroState {
       };
     case 'ACTIVATE_GUARDIAN':
        return { ...state, mode: AppMode.GUARDIAN, guardianData: { ...state.guardianData, active: true }};
+    case 'UPDATE_PLAN':
+       return { ...state, guardianData: { ...state.guardianData, plan: action.payload }};
     case 'ADD_TRANSCRIPT':
       return { 
         ...state, 
@@ -60,7 +61,6 @@ function reducer(state: NeuroState, action: ActionType): NeuroState {
       const baseLat = state.guardianData.location?.lat || 0;
       const baseLng = state.guardianData.location?.lng || 0;
       const jitter = () => (Math.random() - 0.5) * 0.0002; 
-      
       const newEvent: EnvironmentalEvent = {
           id: Date.now().toString(),
           timestamp: Date.now(),
@@ -112,7 +112,6 @@ const App: React.FC = () => {
        const distStr = state.navData?.distance || "";
        let intensity = 0.2;
        if (distStr.includes("1m") || distStr.includes("2m")) intensity = 0.9;
-       if (distStr.includes("5m")) intensity = 0.5;
        soundEngine.startSonar(intensity);
     } 
     else if (state.mode === AppMode.DANGER) {
@@ -121,10 +120,10 @@ const App: React.FC = () => {
     else if (state.mode === AppMode.SCANNING) {
        soundEngine.playSuccess();
     }
-    else if (state.mode !== AppMode.IDLE) {
+    else if (state.mode !== AppMode.IDLE && state.mode !== AppMode.GUARDIAN) {
        soundEngine.playModeSwitch();
     }
-  }, [state.mode, state.navData?.distance, state.navData?.hazard]);
+  }, [state.mode, state.navData?.distance]);
 
   const handleToolCall = useCallback(async (name: string, args: any) => {
     if (name !== 'logEnvironmentalEvent' && name !== 'queryMemory') {
@@ -151,6 +150,10 @@ const App: React.FC = () => {
       dispatch({ type: 'ACTIVATE_GUARDIAN' });
       return { success: true };
     } 
+    else if (name === 'provideEmergencyPlan') {
+      dispatch({ type: 'UPDATE_PLAN', payload: args });
+      return { success: true };
+    }
     else if (name === 'logEnvironmentalEvent') {
       dispatch({ type: 'LOG_EVENT', payload: { type: args.type, description: args.description } });
       return { success: true, message: "Event logged to memory." };
@@ -168,7 +171,7 @@ const App: React.FC = () => {
 
   const handleTranscript = (text: string) => {};
 
-  const { connect, disconnect, isConnected } = useLiveSession({
+  const { connect, disconnect, isConnected, videoStream, error } = useLiveSession({
     onToolCall: handleToolCall,
     onTranscript: handleTranscript
   });
@@ -190,60 +193,65 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="h-screen w-screen bg-black text-white overflow-hidden flex flex-col font-sans relative">
+    <div className="h-[100dvh] w-screen bg-black text-white overflow-hidden flex flex-col font-sans relative">
       
-      {/* 
-        ACCESSIBILITY HEADER 
-        High contrast status indicators.
-      */}
-      <div className="absolute top-0 left-0 w-full p-4 z-50 flex justify-between pointer-events-none">
-         <div className={`pointer-events-auto flex items-center gap-2 px-4 py-3 rounded-xl border-4 ${isConnected ? 'border-[#FFD600] bg-black text-[#FFD600]' : 'border-gray-600 bg-gray-900 text-gray-400'}`}>
-            <Activity className={`${isConnected ? 'animate-pulse' : ''}`} size={24} strokeWidth={4} />
-            <span className="font-bold text-lg tracking-wider" aria-live="polite">
+      {/* Header - Safe Area Top */}
+      <div className="absolute top-0 left-0 w-full p-2 pt-safe z-50 flex justify-between pointer-events-none items-start">
+         <div className={`pointer-events-auto flex items-center gap-2 px-3 py-2 md:px-4 md:py-3 rounded-xl border-4 ${isConnected ? 'border-[#FFD600] bg-black text-[#FFD600]' : 'border-gray-600 bg-gray-900 text-gray-400'} mt-2 ml-2`}>
+            <Activity className={`${isConnected ? 'animate-pulse' : ''}`} size={20} strokeWidth={4} />
+            <span className="font-bold text-base md:text-lg tracking-wider" aria-live="polite">
                 {isConnected ? 'LIVE' : 'OFF'}
             </span>
          </div>
          
          <button 
            onClick={() => dispatch({ type: 'ACTIVATE_GUARDIAN' })}
-           className="pointer-events-auto bg-[#FF4D00] text-white border-4 border-white px-6 py-3 rounded-xl font-black text-xl animate-pulse hover:bg-red-600 active:scale-95 shadow-xl flex items-center gap-2"
+           className="pointer-events-auto bg-[#FF4D00] text-white border-4 border-white px-4 py-2 md:px-6 md:py-3 rounded-xl font-black text-lg md:text-xl animate-pulse hover:bg-red-600 active:scale-95 shadow-xl flex items-center gap-2 mt-2 mr-2"
            aria-label="Emergency Help"
          >
-           <ShieldAlert size={28} strokeWidth={4} /> HELP
+           <ShieldAlert size={24} strokeWidth={4} /> HELP
          </button>
       </div>
 
-      {/* 
-        MAIN CONTENT AREA
-        This is the "Liquid Interface".
-      */}
-      <main className="flex-1 relative z-0" role="main" aria-live="assertive">
-         <LiquidDisplay state={state} />
+      {/* Permission Error Banner */}
+      {error && (
+         <div className="absolute top-24 left-4 right-4 z-50 bg-[#FF4D00] text-white p-4 rounded-xl border-4 border-white flex items-center gap-4 animate-bounce">
+            <AlertOctagon size={48} strokeWidth={3} />
+            <div>
+               <h2 className="text-2xl font-black uppercase">System Error</h2>
+               <p className="font-bold">{error}</p>
+            </div>
+         </div>
+      )}
+
+      {/* Main Content */}
+      <main className="flex-1 relative z-0 h-full w-full" role="main" aria-live="assertive">
+         <LiquidDisplay 
+            state={state} 
+            videoStream={videoStream} 
+            onExitGuardian={() => dispatch({ type: 'SET_MODE', payload: AppMode.IDLE })}
+         />
       </main>
 
-      {/* 
-        BOTTOM CONTROLS 
-        Anchored to bottom center. Massive touch target.
-      */}
-      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-50 flex items-center justify-center w-full pointer-events-none">
-           <button 
-             onClick={toggleConnection}
-             className={`pointer-events-auto w-32 h-32 rounded-full flex items-center justify-center border-[8px] transition-all duration-200 active:scale-90 ${
-                isConnected 
-                ? 'border-white bg-[#FFD600] text-black shadow-[0_0_50px_rgba(255,214,0,0.8)]' 
-                : 'border-gray-500 bg-gray-800 text-gray-400'
-             }`}
-             aria-label={isConnected ? "Stop NeuroSync" : "Start NeuroSync"}
-             title={isConnected ? "Stop" : "Start"}
-           >
-             <Power size={56} strokeWidth={4} />
-           </button>
-      </div>
+      {/* Bottom Controls - Safe Area Bottom */}
+      {state.mode !== AppMode.GUARDIAN && (
+        <div className="absolute bottom-6 pb-safe left-1/2 -translate-x-1/2 z-50 flex items-center justify-center w-full pointer-events-none">
+             <button 
+               onClick={toggleConnection}
+               className={`pointer-events-auto w-24 h-24 md:w-32 md:h-32 rounded-full flex items-center justify-center border-[6px] md:border-[8px] transition-all duration-200 active:scale-90 ${
+                  isConnected 
+                  ? 'border-white bg-[#FFD600] text-black shadow-[0_0_50px_rgba(255,214,0,0.8)]' 
+                  : 'border-gray-500 bg-gray-800 text-gray-400'
+               }`}
+               aria-label={isConnected ? "Stop NeuroSync" : "Start NeuroSync"}
+               title={isConnected ? "Stop" : "Start"}
+             >
+               <Power size={40} className="md:w-14 md:h-14" strokeWidth={4} />
+             </button>
+        </div>
+      )}
 
-      {/* 
-        DEBUG PANEL TRIGGER
-        Hidden in corner, small touch target to avoid accidental hits.
-      */}
+      {/* Debug Trigger */}
       <div className="fixed top-24 right-4 z-[60]">
           <button 
             onClick={() => setShowDebug(!showDebug)} 
@@ -255,26 +263,31 @@ const App: React.FC = () => {
       </div>
 
       {showDebug && (
-        <div className="fixed top-24 right-16 w-72 bg-white border-4 border-black p-4 text-sm z-[60] shadow-2xl text-black font-bold">
-          <h3 className="mb-4 uppercase border-b-4 border-black pb-2 text-xl">Simulator</h3>
-          
-          <div className="grid grid-cols-2 gap-3 mb-4">
-             <button onClick={() => dispatch({ type: 'UPDATE_NAV', payload: { direction: 'STRAIGHT', distance: '10m' }})} className="bg-gray-200 p-3 hover:bg-yellow-300 border-2 border-black font-bold">FWD</button>
-             <button onClick={() => dispatch({ type: 'UPDATE_NAV', payload: { direction: 'LEFT', distance: 'Turn' }})} className="bg-gray-200 p-3 hover:bg-yellow-300 border-2 border-black font-bold">LEFT</button>
-             <button onClick={() => dispatch({ type: 'UPDATE_READ', payload: { text: "Latte $4.00" }})} className="bg-gray-200 p-3 hover:bg-yellow-300 border-2 border-black font-bold">READ</button>
-             <button onClick={() => dispatch({ type: 'UPDATE_SCAN', payload: { objectName: "Soup Can", details: "Tomato" }})} className="bg-gray-200 p-3 hover:bg-yellow-300 border-2 border-black font-bold">SCAN</button>
-             <button onClick={() => dispatch({ type: 'TRIGGER_DANGER', payload: "Car Backing Up!" })} className="col-span-2 bg-[#FF4D00] text-white p-3 border-2 border-black font-black uppercase">! DANGER !</button>
-             <button onClick={() => dispatch({ type: 'LOG_EVENT', payload: { type: 'OBJECT_SEEN', description: "Keys on table" }})} className="col-span-2 bg-[#0047AB] text-white p-3 border-2 border-black font-bold">LOG MEMORY</button>
-          </div>
+        <div className="fixed inset-0 bg-black/80 z-[70] flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white border-4 border-black p-4 text-sm shadow-2xl text-black font-bold rounded-xl overflow-y-auto max-h-[80vh]">
+            <div className="flex justify-between items-center mb-4 border-b-4 border-black pb-2">
+                <h3 className="uppercase text-xl">Simulator</h3>
+                <button onClick={() => setShowDebug(false)} className="bg-black text-white p-2 rounded">CLOSE</button>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-3 mb-4">
+               <button onClick={() => dispatch({ type: 'UPDATE_NAV', payload: { direction: 'STRAIGHT', distance: '10m' }})} className="bg-gray-200 p-3 hover:bg-yellow-300 border-2 border-black font-bold rounded">FWD</button>
+               <button onClick={() => dispatch({ type: 'UPDATE_NAV', payload: { direction: 'LEFT', distance: 'Turn' }})} className="bg-gray-200 p-3 hover:bg-yellow-300 border-2 border-black font-bold rounded">LEFT</button>
+               <button onClick={() => dispatch({ type: 'UPDATE_READ', payload: { text: "Latte $4.00" }})} className="bg-gray-200 p-3 hover:bg-yellow-300 border-2 border-black font-bold rounded">READ</button>
+               <button onClick={() => dispatch({ type: 'UPDATE_SCAN', payload: { objectName: "Soup Can", details: "Tomato" }})} className="bg-gray-200 p-3 hover:bg-yellow-300 border-2 border-black font-bold rounded">SCAN</button>
+               <button onClick={() => dispatch({ type: 'TRIGGER_DANGER', payload: "Car Backing Up!" })} className="col-span-2 bg-[#FF4D00] text-white p-3 border-2 border-black font-black uppercase rounded">! DANGER !</button>
+               <button onClick={() => dispatch({ type: 'UPDATE_PLAN', payload: { safeExitRoute: "Turn around, walk 10m to exit.", nearestLandmark: "Red Fire Hydrant", hazardSummary: "Slippery Floor", recommendedAction: "Exit Immediately" }})} className="col-span-2 bg-[#0047AB] text-white p-3 border-2 border-black font-bold rounded">GENERATE PLAN</button>
+            </div>
 
-          <div className="border-t-4 border-black pt-3">
-            <label className="block mb-1 font-bold">API_KEY</label>
-            <input 
-              type="password" 
-              value={apiKey} 
-              onChange={(e) => setApiKey(e.target.value)} 
-              className="w-full bg-gray-100 border-2 border-black p-3 text-black font-mono"
-            />
+            <div className="border-t-4 border-black pt-3">
+              <label className="block mb-1 font-bold">API_KEY</label>
+              <input 
+                type="password" 
+                value={apiKey} 
+                onChange={(e) => setApiKey(e.target.value)} 
+                className="w-full bg-gray-100 border-2 border-black p-3 text-black font-mono rounded"
+              />
+            </div>
           </div>
         </div>
       )}

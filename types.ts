@@ -23,6 +23,13 @@ export interface ScanningData {
   details: string;
 }
 
+export interface EmergencyPlan {
+  safeExitRoute: string;
+  nearestLandmark: string;
+  hazardSummary: string;
+  recommendedAction: string;
+}
+
 export interface EnvironmentalEvent {
   id: string;
   timestamp: number;
@@ -36,6 +43,7 @@ export interface GuardianData {
   location?: { lat: number; lng: number };
   transcript: string[];
   eventLog: EnvironmentalEvent[];
+  plan?: EmergencyPlan;
 }
 
 export interface NeuroState {
@@ -54,6 +62,7 @@ export type ActionType =
   | { type: 'UPDATE_SCAN'; payload: ScanningData }
   | { type: 'TRIGGER_DANGER'; payload: string }
   | { type: 'ACTIVATE_GUARDIAN' }
+  | { type: 'UPDATE_PLAN'; payload: EmergencyPlan }
   | { type: 'ADD_TRANSCRIPT'; payload: string }
   | { type: 'LOG_EVENT'; payload: Omit<EnvironmentalEvent, 'id' | 'timestamp'> }
   | { type: 'UPDATE_LOCATION'; payload: { lat: number; lng: number } }

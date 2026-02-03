@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
 import { MODEL_NAME, SYSTEM_INSTRUCTION, TOOLS } from '../constants';
-import { AppMode } from '../types';
 
-// Helper for audio
+// Helper for audio blob creation
 function createBlob(data: Float32Array): Blob {
   const l = data.length;
   const int16 = new Int16Array(l);
@@ -52,20 +51,22 @@ interface UseLiveSessionProps {
 export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
   
   // Refs for cleanup and stability
   const sessionRef = useRef<any>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const nextStartTimeRef = useRef<number>(0);
   const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
 
   // Connect to Gemini
   const connect = useCallback(async () => {
+    setError(null);
     if (!process.env.API_KEY) {
-      console.error("No API Key found");
+      setError("API Key Missing");
       return;
     }
 
@@ -86,7 +87,7 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
           frameRate: 24
         } 
       });
-      streamRef.current = mediaStream;
+      setVideoStream(mediaStream);
 
       // Connect session
       const sessionPromise = ai.live.connect({
@@ -116,7 +117,6 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
                
                // Send Audio
                sessionPromise.then(session => {
-                  // base64 encode
                   const reader = new FileReader();
                   reader.onloadend = () => {
                     const base64data = (reader.result as string).split(',')[1];
@@ -144,7 +144,6 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
                 source.buffer = buffer;
                 source.connect(ctx.destination);
                 
-                // Scheduling
                 const now = ctx.currentTime;
                 const start = Math.max(now, nextStartTimeRef.current);
                 source.start(start);
@@ -154,14 +153,12 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
                 source.onended = () => sourcesRef.current.delete(source);
             }
 
-            // Handle Interruptions
             if (msg.serverContent?.interrupted) {
                 sourcesRef.current.forEach(s => s.stop());
                 sourcesRef.current.clear();
                 nextStartTimeRef.current = 0;
             }
 
-            // Handle Tools
             if (msg.toolCall) {
                 for (const fc of msg.toolCall.functionCalls) {
                     const result = await onToolCall(fc.name, fc.args);
@@ -184,6 +181,7 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
           onerror: (err) => {
             console.error("Gemini Error", err);
             setIsConnected(false);
+            setError("Connection Error");
           }
         }
       });
@@ -217,14 +215,15 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
             }
         });
 
-      }, 500); // 2 FPS (500ms) for better responsiveness
+      }, 500);
 
       return () => {
          clearInterval(videoInterval);
       }
 
-    } catch (e) {
+    } catch (e: any) {
       console.error("Connection failed", e);
+      setError(e.message || "Permissions Denied");
     }
   }, [onToolCall]);
 
@@ -234,5 +233,5 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
     }
   };
 
-  return { connect, disconnect, isConnected, isStreaming };
+  return { connect, disconnect, isConnected, isStreaming, videoStream, error };
 };

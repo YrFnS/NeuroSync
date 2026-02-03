@@ -1,20 +1,33 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ShieldAlert, AlertTriangle, Key, Radio, Share2, Check, Copy } from 'lucide-react';
+import { ShieldAlert, Radio, Share2, Check, Copy, Video, X, MapPin, Footprints, AlertTriangle, ArrowRightCircle } from 'lucide-react';
 import { NeuroState } from '../../types';
 import L from 'leaflet';
 
-// Constants for Map
 const DARK_TILES = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
-const TILE_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+const TILE_ATTR = '&copy; OpenStreetMap contributors &copy; CARTO';
 
-export const GuardianMode: React.FC<{ data: NeuroState['guardianData'] }> = ({ data }) => {
+interface Props {
+  data: NeuroState['guardianData'];
+  videoStream: MediaStream | null;
+  onExit: () => void;
+}
+
+export const GuardianMode: React.FC<Props> = ({ data, videoStream, onExit }) => {
   const [copied, setCopied] = useState(false);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.LayerGroup>(L.layerGroup());
+  const videoRef = useRef<HTMLVideoElement>(null);
   const link = `https://neurosync.app/live/${Math.random().toString(36).substring(7)}`;
 
-  // Custom Icons
+  // Attach video stream
+  useEffect(() => {
+    if (videoRef.current && videoStream) {
+        videoRef.current.srcObject = videoStream;
+    }
+  }, [videoStream]);
+
+  // Leaflet Icons
   const userIcon = L.divIcon({
     className: 'custom-div-icon',
     html: `<div style="background-color: #00FF94; width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 10px #00FF94; border: 2px solid white;"></div>`,
@@ -45,50 +58,31 @@ export const GuardianMode: React.FC<{ data: NeuroState['guardianData'] }> = ({ d
   // Initialize Map
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
-
-    // Default to New York if no location
     const initialLat = data.location?.lat || 40.7128;
     const initialLng = data.location?.lng || -74.0060;
 
-    const map = L.map(mapContainerRef.current, {
-       zoomControl: false,
-       attributionControl: false
-    }).setView([initialLat, initialLng], 15);
+    const map = L.map(mapContainerRef.current, { zoomControl: false, attributionControl: false, dragging: !L.Browser.mobile })
+      .setView([initialLat, initialLng], 15);
 
-    L.tileLayer(DARK_TILES, {
-        attribution: TILE_ATTR,
-        subdomains: 'abcd',
-        maxZoom: 20
-    }).addTo(map);
-
+    L.tileLayer(DARK_TILES, { attribution: TILE_ATTR, maxZoom: 20 }).addTo(map);
     markersRef.current.addTo(map);
     mapInstanceRef.current = map;
 
-    return () => {
-        map.remove();
-        mapInstanceRef.current = null;
-    };
+    return () => { map.remove(); mapInstanceRef.current = null; };
   }, []);
 
-  // Update Map Position & Markers
+  // Update Map
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
-
-    // Clear existing markers
     markersRef.current.clearLayers();
 
-    // 1. Add User Marker (if location exists)
     if (data.location) {
         L.marker([data.location.lat, data.location.lng], { icon: userIcon })
          .bindPopup("USER LOCATION")
          .addTo(markersRef.current);
-        
-        // Only pan if it's significantly different to avoid jitter during interaction
-        // map.panTo([data.location.lat, data.location.lng]);
     }
 
-    // 2. Add Event Markers
     data.eventLog.forEach(event => {
         if (event.coordinates) {
             const icon = event.type === 'HAZARD_DETECTED' ? hazardIcon : objectIcon;
@@ -97,97 +91,133 @@ export const GuardianMode: React.FC<{ data: NeuroState['guardianData'] }> = ({ d
              .addTo(markersRef.current);
         }
     });
-
   }, [data.location, data.eventLog]);
 
-  // Recenter button effect
-  const recenter = () => {
-      if (mapInstanceRef.current && data.location) {
-          mapInstanceRef.current.flyTo([data.location.lat, data.location.lng], 16);
-      }
-  };
-
   return (
-    <div className="flex flex-col h-full w-full bg-slate-900 p-6 animate-in slide-in-from-right duration-500">
+    <div className="flex flex-col h-full w-full bg-slate-900 p-2 md:p-4 animate-in slide-in-from-right duration-500 overflow-y-auto tactical-grid pb-safe">
       
-      {/* Header with Share Action */}
-      <div className="flex flex-col gap-4 mb-6">
-          <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4 text-red-500">
-                  <ShieldAlert size={40} className="animate-pulse" />
-                  <h1 className="text-2xl font-black font-mono">GUARDIAN_LINK</h1>
+      {/* Dashboard Header */}
+      <div className="flex items-center justify-between mb-4 bg-black/60 p-2 rounded border border-slate-700 backdrop-blur-sm sticky top-0 z-50">
+          <div className="flex items-center gap-3 text-red-500">
+              <ShieldAlert size={28} className="animate-pulse" />
+              <div className="leading-none">
+                 <h1 className="text-lg md:text-xl font-black font-mono tracking-tighter text-white">GUARDIAN<span className="text-red-500">_LINK</span></h1>
+                 <p className="text-[10px] text-gray-400 font-mono">SECURE CONNECTION // LIVE</p>
               </div>
-              <div className="bg-red-500 text-white px-3 py-1 text-xs font-mono rounded">LIVE</div>
           </div>
-
-          {/* Link Generator Simulation */}
-          <button 
-            onClick={copyLink}
-            className="flex items-center justify-between w-full bg-slate-800 border border-slate-600 p-3 rounded-lg group hover:border-green-500 transition-colors"
-          >
-             <div className="flex items-center gap-3">
-                <Share2 size={18} className="text-green-500" />
-                <div className="text-left">
-                    <p className="text-xs text-gray-400 font-mono">EMERGENCY SHARE LINK</p>
-                    <p className="text-sm text-white font-mono truncate max-w-[200px]">{link}</p>
-                </div>
-             </div>
-             <div className="bg-slate-700 p-2 rounded group-hover:bg-slate-600">
-                {copied ? <Check size={18} className="text-green-500"/> : <Copy size={18} className="text-white"/>}
-             </div>
+          <button onClick={onExit} className="bg-red-500/10 text-red-500 border border-red-500/50 px-3 py-1.5 rounded font-bold hover:bg-red-500 hover:text-white flex items-center gap-2 transition-all text-xs md:text-sm">
+             <X size={16} /> CLOSE
           </button>
       </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full pb-20">
+
+      {/* Grid Layout - Stacks on mobile */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
          
-         {/* Map Container */}
-         <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden relative min-h-[300px] flex flex-col">
-            <div ref={mapContainerRef} className="flex-1 w-full h-full z-0" />
-            
-            {/* Overlay UI on Map */}
-            <div className="absolute bottom-4 left-4 z-[400] bg-black/80 p-2 rounded border border-gray-700 text-xs font-mono text-green-400 pointer-events-none">
-              LOC: {data.location?.lat ? data.location.lat.toFixed(5) : "ACQUIRING..."} <br/>
-              LNG: {data.location?.lng ? data.location.lng.toFixed(5) : "ACQUIRING..."} <br/>
-              STATUS: {data.location ? "GPS_LOCKED" : "SEARCHING"}
-            </div>
-            
-            {data.location && (
-                <button onClick={recenter} className="absolute bottom-4 right-4 z-[400] bg-blue-600 text-white p-2 rounded hover:bg-blue-500 shadow-lg">
-                    <Radio size={20} />
-                </button>
-            )}
+         {/* LEFT COL: Video & Map */}
+         <div className="lg:col-span-1 flex flex-col gap-4">
+             {/* Live Video Feed */}
+             <div className="bg-black rounded-lg border border-slate-700 overflow-hidden relative aspect-video flex flex-col shadow-lg shrink-0">
+                <div className="absolute top-2 left-2 z-10 bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded animate-pulse flex items-center gap-1 font-mono">
+                    <div className="w-2 h-2 bg-white rounded-full"></div> LIVE FEED
+                </div>
+                {videoStream ? (
+                    <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover opacity-80" />
+                ) : (
+                    <div className="flex items-center justify-center h-full text-gray-500 font-mono text-sm bg-slate-900">
+                        <Video size={40} className="mb-2 opacity-50" />
+                        NO SIGNAL
+                    </div>
+                )}
+                <div className="absolute inset-0 border-[1px] border-white/10 pointer-events-none"></div>
+             </div>
+
+             {/* Map Container */}
+             <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden relative min-h-[200px] flex-1 lg:flex-auto flex flex-col shadow-lg">
+                <div ref={mapContainerRef} className="absolute inset-0 w-full h-full z-0 opacity-80 mix-blend-lighten" />
+                <div className="absolute bottom-2 left-2 z-[400] bg-black/80 p-1.5 rounded border border-gray-700 text-[10px] font-mono text-green-400 pointer-events-none">
+                  LOC: {data.location ? "GPS_LOCKED" : "SEARCHING..."}
+                </div>
+             </div>
          </div>
 
-         {/* Event Log */}
-         <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 flex flex-col">
-            <h3 className="text-gray-400 font-mono text-sm mb-4 flex items-center gap-2">
-              <Radio size={16} className="text-green-500" /> SYSTEM_EVENTS
-            </h3>
-            <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
-               {data.eventLog.length === 0 && <span className="text-gray-600 text-sm font-mono italic">No events logged...</span>}
-               
-               {data.eventLog.map((event) => (
-                  <div key={event.id} className="border-l-2 border-slate-600 pl-4 py-1 animate-in fade-in slide-in-from-left duration-300">
-                     <div className="flex justify-between items-start">
-                        <span className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded ${
-                            event.type === 'HAZARD_DETECTED' ? 'bg-red-900/50 text-red-200' : 
-                            event.type === 'OBJECT_SEEN' ? 'bg-blue-900/50 text-blue-200' : 
-                            'bg-gray-700 text-gray-300'
-                        }`}>{event.type}</span>
-                        <span className="text-[10px] text-gray-500 font-mono">{new Date(event.timestamp).toLocaleTimeString()}</span>
-                     </div>
-                     <p className="text-sm text-gray-300 mt-1 leading-relaxed">
-                       {event.description}
-                     </p>
-                     {event.coordinates && (
-                        <p className="text-[10px] text-gray-500 font-mono mt-1">
-                            [{event.coordinates.lat.toFixed(4)}, {event.coordinates.lng.toFixed(4)}]
-                        </p>
-                     )}
-                  </div>
-               ))}
+         {/* CENTER COL: Generative Plan */}
+         <div className="lg:col-span-2 flex flex-col gap-4 min-h-[400px]">
+            
+            {/* Generated Plan Card */}
+            <div className="bg-black/40 border border-slate-600 rounded-lg p-1 backdrop-blur-sm flex-1 flex flex-col">
+                <div className="bg-slate-800/50 p-2 border-b border-slate-700 flex justify-between items-center">
+                   <h2 className="text-sm font-bold text-blue-400 font-mono flex items-center gap-2">
+                     <Share2 size={16} /> TACTICAL RESPONSE PLAN
+                   </h2>
+                   {!data.plan && <span className="text-[10px] text-yellow-400 animate-pulse font-mono">GENERATING...</span>}
+                </div>
+                
+                <div className="p-4 flex-1 overflow-y-auto max-h-[400px] lg:max-h-none">
+                    {data.plan ? (
+                        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+                            <div className="bg-blue-900/20 border-l-4 border-blue-500 p-4 rounded-r-lg">
+                                <h3 className="text-blue-300 text-xs font-mono uppercase mb-1">Recommended Action</h3>
+                                <p className="text-xl text-white font-bold leading-tight">{data.plan.recommendedAction}</p>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="bg-slate-800/40 p-3 rounded border border-slate-700">
+                                    <div className="flex items-center gap-2 text-green-400 mb-2">
+                                        <Footprints size={18} />
+                                        <h3 className="text-xs font-mono uppercase">Safe Route</h3>
+                                    </div>
+                                    <p className="text-sm text-gray-300 leading-relaxed">{data.plan.safeExitRoute}</p>
+                                </div>
+
+                                <div className="bg-slate-800/40 p-3 rounded border border-slate-700">
+                                    <div className="flex items-center gap-2 text-red-400 mb-2">
+                                        <AlertTriangle size={18} />
+                                        <h3 className="text-xs font-mono uppercase">Threat Assessment</h3>
+                                    </div>
+                                    <p className="text-sm text-gray-300 leading-relaxed">{data.plan.hazardSummary}</p>
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="h-full flex flex-col items-center justify-center text-slate-500 gap-4 min-h-[200px]">
+                            <div className="w-16 h-16 border-4 border-slate-700 border-t-blue-500 rounded-full animate-spin"></div>
+                            <p className="font-mono text-sm animate-pulse">ANALYZING ENVIRONMENT SCENE...</p>
+                        </div>
+                    )}
+                </div>
             </div>
+
+            {/* Event Log */}
+            <div className="bg-slate-800/80 p-3 rounded-lg border border-slate-700 h-48 flex flex-col shrink-0">
+                <h3 className="text-gray-400 font-mono text-xs mb-2 flex items-center gap-2 border-b border-slate-700 pb-2">
+                  <Radio size={14} className="text-green-500" /> SYSTEM_LOG
+                </h3>
+                <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                   {data.eventLog.map((event) => (
+                      <div key={event.id} className="flex gap-2 text-xs font-mono">
+                         <span className="text-slate-500 shrink-0">{new Date(event.timestamp).toLocaleTimeString()}</span>
+                         <span className={`${event.type === 'HAZARD_DETECTED' ? 'text-red-400' : 'text-green-400'} font-bold`}>
+                            [{event.type}]
+                         </span>
+                         <span className="text-slate-300 truncate">{event.description}</span>
+                      </div>
+                   ))}
+                </div>
+            </div>
+
+             {/* Share Link Footer */}
+            <button 
+                onClick={copyLink}
+                className="w-full bg-slate-900 border border-slate-700 p-3 rounded-lg group hover:border-green-500 transition-colors flex items-center justify-between shrink-0"
+            >
+                <div className="flex items-center gap-3 overflow-hidden">
+                    <Share2 size={16} className="text-green-500 shrink-0" />
+                    <span className="text-xs text-gray-400 font-mono truncate">SECURE LINK: <span className="text-white">{link}</span></span>
+                </div>
+                {copied ? <Check size={16} className="text-green-500 shrink-0"/> : <Copy size={16} className="text-gray-500 group-hover:text-white shrink-0"/>}
+            </button>
          </div>
+
       </div>
     </div>
   );

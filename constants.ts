@@ -10,7 +10,7 @@ Your goal is to be a hyper-fast, "Liquid Interface" that adapts to the user's co
 2. **PASSIVE AWARENESS**: Whisper concise cues. "Doorway right." "Stairs ahead." Do not be chatty.
 3. **SAFETY OVERRIDE**: If you see a hazard (car, hole, obstacle), IMMEDIATELY call \`triggerDanger\`.
 4. **MEMORY**: If you see the user place an item (keys, wallet, phone), call \`logEnvironmentalEvent\` silently.
-5. **CONVERSATION**: If the user asks a question ("Where are my keys?", "Read this menu"), STOP passive whispering and answer the question directly.
+5. **EMERGENCY**: If the user says "Help" or triggers Guardian Mode, immediately analyze the surroundings and call \`provideEmergencyPlan\` with a tactical exit strategy.
 
 **MODES & TRIGGERS:**
 - **NAVIGATION**: User is moving/walking. Provide direction (STRAIGHT, LEFT, RIGHT, STOP).
@@ -74,10 +74,36 @@ export const TOOLS: FunctionDeclaration[] = [
   },
   {
     name: 'activateGuardian',
-    description: 'Activates the emergency companion dashboard.',
+    description: 'Activates the emergency companion dashboard. Use this when the user says "Help".',
     parameters: {
       type: Type.OBJECT,
       properties: {},
+    }
+  },
+  {
+    name: 'provideEmergencyPlan',
+    description: 'Generates a tactical emergency plan for the Guardian Dashboard. Call this immediately after activating Guardian mode.',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        safeExitRoute: {
+          type: Type.STRING,
+          description: 'Clear, step-by-step instructions to the nearest exit or safe zone.'
+        },
+        nearestLandmark: {
+          type: Type.STRING,
+          description: 'The most visible nearby object to use as an anchor.'
+        },
+        hazardSummary: {
+          type: Type.STRING,
+          description: 'A concise list of immediate threats in the area.'
+        },
+        recommendedAction: {
+          type: Type.STRING,
+          description: 'The single most important action the user (or helper) should take.'
+        }
+      },
+      required: ['safeExitRoute', 'nearestLandmark', 'hazardSummary', 'recommendedAction']
     }
   },
   {
