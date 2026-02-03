@@ -1,0 +1,9 @@
+{
+  "name": "NeuroSync",
+  "description": "An active, multimodal AI agent for the visually impaired that adapts its interface in real-time based on environmental context using Gemini Live API.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}

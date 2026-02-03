@@ -1,0 +1,59 @@
+export enum AppMode {
+  IDLE = 'IDLE',
+  NAVIGATION = 'NAVIGATION',
+  READING = 'READING',
+  SCANNING = 'SCANNING',
+  DANGER = 'DANGER',
+  GUARDIAN = 'GUARDIAN' // The "Help" mode
+}
+
+export interface NavigationData {
+  direction: 'STRAIGHT' | 'LEFT' | 'RIGHT' | 'STOP' | 'CROSSWALK';
+  distance: string; // e.g. "5m"
+  hazard?: string;
+}
+
+export interface ReadingData {
+  text: string;
+  summary?: string;
+}
+
+export interface ScanningData {
+  objectName: string;
+  details: string;
+}
+
+export interface EnvironmentalEvent {
+  id: string;
+  timestamp: number;
+  type: 'OBJECT_SEEN' | 'HAZARD_DETECTED' | 'LOCATION_CHANGE';
+  description: string;
+  coordinates?: { x: number, y: number }; // Relative map coordinates for visualization
+}
+
+export interface GuardianData {
+  active: boolean;
+  location?: { lat: number; lng: number };
+  transcript: string[];
+  eventLog: EnvironmentalEvent[];
+}
+
+export interface NeuroState {
+  mode: AppMode;
+  navData?: NavigationData;
+  readData?: ReadingData;
+  scanData?: ScanningData;
+  guardianData: GuardianData;
+  isAudioStreaming: boolean;
+}
+
+export type ActionType = 
+  | { type: 'SET_MODE'; payload: AppMode }
+  | { type: 'UPDATE_NAV'; payload: NavigationData }
+  | { type: 'UPDATE_READ'; payload: ReadingData }
+  | { type: 'UPDATE_SCAN'; payload: ScanningData }
+  | { type: 'TRIGGER_DANGER'; payload: string }
+  | { type: 'ACTIVATE_GUARDIAN' }
+  | { type: 'ADD_TRANSCRIPT'; payload: string }
+  | { type: 'LOG_EVENT'; payload: Omit<EnvironmentalEvent, 'id' | 'timestamp'> }
+  | { type: 'SET_STREAMING'; payload: boolean };
