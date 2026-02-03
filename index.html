@@ -10,121 +10,68 @@
      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
      crossorigin=""/>
     <style>
-      /* Custom Fonts & Base Styles */
-      @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;600;800&display=swap');
+      /* ACCESSIBILITY FONT: Atkinson Hyperlegible (Braille Institute) */
+      @import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&display=swap');
 
       :root {
-        --neon-green: #00FF94;
-        --alert-red: #FF2E2E;
-        --deep-black: #050505;
-        --scan-blue: #2E94FF;
+        --safety-yellow: #FFD600;
+        --signal-orange: #FF4D00;
+        --void-black: #000000;
+        --pure-white: #FFFFFF;
+        --cobalt-blue: #0047AB;
       }
 
       body {
-        background-color: var(--deep-black);
-        color: white;
-        font-family: 'Inter', sans-serif;
+        background-color: var(--void-black);
+        color: var(--pure-white);
+        font-family: 'Atkinson Hyperlegible', sans-serif;
         overscroll-behavior: none;
         overflow: hidden; /* Prevent scroll */
       }
 
-      .font-mono {
-        font-family: 'Space Mono', monospace;
-      }
-
-      /* Noise Texture */
-      .bg-noise {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        pointer-events: none;
-        z-index: 5;
-        opacity: 0.03;
-        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
-      }
-
-      /* CRT Scanline */
-      .crt-scanline {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        background: linear-gradient(
-          to bottom,
-          rgba(255, 255, 255, 0),
-          rgba(255, 255, 255, 0) 50%,
-          rgba(0, 0, 0, 0.1) 50%,
-          rgba(0, 0, 0, 0.1)
-        );
-        background-size: 100% 4px;
-        pointer-events: none;
-        z-index: 10;
-      }
-
-      /* Utilities for high contrast & liquid UI */
+      /* Utilities for High Contrast UI */
       .liquid-transition {
-        transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
       }
 
-      .scan-beam {
-        position: absolute;
-        width: 100%;
-        height: 2px;
-        background: var(--scan-blue);
-        box-shadow: 0 0 10px var(--scan-blue);
-        animation: scan-vertical 3s linear infinite;
-        opacity: 0.7;
+      /* Solid, bold borders for low vision visibility */
+      .hc-border {
+        border: 4px solid var(--pure-white);
       }
 
-      @keyframes scan-vertical {
-        0% { top: -10%; opacity: 0; }
-        10% { opacity: 1; }
-        90% { opacity: 1; }
-        100% { top: 110%; opacity: 0; }
+      .pulse-heavy {
+        animation: pulse-heavy 1.5s ease-in-out infinite;
       }
 
-      .pulse-ring {
-        animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+      @keyframes pulse-heavy {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.05); opacity: 0.8; }
       }
 
-      @keyframes pulse-ring {
-        0% { transform: scale(0.8); opacity: 0.5; box-shadow: 0 0 0 0 rgba(0, 255, 148, 0.7); }
-        70% { transform: scale(1.15); opacity: 0; box-shadow: 0 0 0 30px rgba(0, 255, 148, 0); }
-        100% { transform: scale(0.8); opacity: 0; }
+      /* Flash effect for danger */
+      .flash-danger {
+        animation: flash-red 0.5s linear infinite;
       }
 
-      /* Breathing animation for idle state */
-      .breathe {
-        animation: breathe 4s ease-in-out infinite;
+      @keyframes flash-red {
+        0%, 100% { background-color: var(--signal-orange); color: black; }
+        50% { background-color: black; color: var(--signal-orange); }
       }
 
-      @keyframes breathe {
-        0%, 100% { opacity: 0.4; transform: scale(0.98); }
-        50% { opacity: 0.8; transform: scale(1.02); }
-      }
-
-      /* Hide scrollbar for immersive feel */
-      ::-webkit-scrollbar {
-        width: 0px;
-        background: transparent;
-      }
-      
-      /* Leaflet Customization */
+      /* Leaflet Customization for High Contrast */
       .leaflet-container {
-        background: #1e293b;
-        font-family: 'Space Mono', monospace;
+        background: #000;
+        font-family: 'Atkinson Hyperlegible', sans-serif;
       }
       .leaflet-popup-content-wrapper {
-        background: rgba(0, 0, 0, 0.9);
-        color: #00FF94;
-        border: 1px solid #00FF94;
-        border-radius: 0;
+        background: #000;
+        color: var(--safety-yellow);
+        border: 2px solid var(--safety-yellow);
+        border-radius: 4px;
+        font-weight: bold;
       }
       .leaflet-popup-tip {
-        background: #00FF94;
+        background: var(--safety-yellow);
       }
     </style>
   <script type="importmap">
@@ -142,8 +89,6 @@
 </head>
   <body>
     <div id="root"></div>
-    <div class="bg-noise"></div>
-    <div class="crt-scanline"></div>
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>

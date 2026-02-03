@@ -3,10 +3,10 @@ import { AppMode, NeuroState, ActionType, EnvironmentalEvent } from './types';
 import { LiquidDisplay } from './components/LiquidDisplay';
 import { useLiveSession } from './hooks/useLiveSession';
 import { useGeolocation } from './hooks/useGeolocation';
-import { Mic, MicOff, Power, Share2, Activity, Play, Square, AlertOctagon, Radio } from 'lucide-react';
+import { soundEngine } from './utils/soundEngine';
+import { Power, Activity, ShieldAlert, Settings } from 'lucide-react';
 
 // --- State Management ---
-// Initialize state from localStorage if available
 const loadMemory = (): EnvironmentalEvent[] => {
   try {
     const stored = localStorage.getItem('neurosync_memory');
@@ -57,10 +57,8 @@ function reducer(state: NeuroState, action: ActionType): NeuroState {
         } 
       };
     case 'LOG_EVENT':
-      // Generate a coordinate near the user if location is known, or default to 0,0
       const baseLat = state.guardianData.location?.lat || 0;
       const baseLng = state.guardianData.location?.lng || 0;
-      // Add slight jitter to simulate precise object location nearby
       const jitter = () => (Math.random() - 0.5) * 0.0002; 
       
       const newEvent: EnvironmentalEvent = {
@@ -95,27 +93,40 @@ const App: React.FC = () => {
   const [showDebug, setShowDebug] = useState(false);
   const { location } = useGeolocation();
   
-  // Ref to access current state inside callbacks without triggering re-renders of the hook
   const stateRef = useRef(state);
   useEffect(() => { stateRef.current = state; }, [state]);
 
-  // Sync Location to State
   useEffect(() => {
     if (location) {
         dispatch({ type: 'UPDATE_LOCATION', payload: location });
     }
   }, [location]);
 
-  // Persist Memory
   useEffect(() => {
     localStorage.setItem('neurosync_memory', JSON.stringify(state.guardianData.eventLog));
   }, [state.guardianData.eventLog]);
 
-  // --- Tool Callbacks ---
+  useEffect(() => {
+    soundEngine.stopSonar();
+    if (state.mode === AppMode.NAVIGATION) {
+       const distStr = state.navData?.distance || "";
+       let intensity = 0.2;
+       if (distStr.includes("1m") || distStr.includes("2m")) intensity = 0.9;
+       if (distStr.includes("5m")) intensity = 0.5;
+       soundEngine.startSonar(intensity);
+    } 
+    else if (state.mode === AppMode.DANGER) {
+       soundEngine.playDangerAlarm();
+    }
+    else if (state.mode === AppMode.SCANNING) {
+       soundEngine.playSuccess();
+    }
+    else if (state.mode !== AppMode.IDLE) {
+       soundEngine.playModeSwitch();
+    }
+  }, [state.mode, state.navData?.distance, state.navData?.hazard]);
+
   const handleToolCall = useCallback(async (name: string, args: any) => {
-    console.log("Tool Called:", name, args);
-    
-    // Don't log internal queries to transcript to keep it clean, or do it for debugging
     if (name !== 'logEnvironmentalEvent' && name !== 'queryMemory') {
          dispatch({ type: 'ADD_TRANSCRIPT', payload: `ACTION: ${name} (${JSON.stringify(args)})` });
     }
@@ -132,41 +143,30 @@ const App: React.FC = () => {
       }
       return { success: true };
     } 
-    
     else if (name === 'triggerDanger') {
       dispatch({ type: 'TRIGGER_DANGER', payload: args.hazardDescription });
       return { success: true };
     } 
-    
     else if (name === 'activateGuardian') {
       dispatch({ type: 'ACTIVATE_GUARDIAN' });
       return { success: true };
     } 
-    
     else if (name === 'logEnvironmentalEvent') {
       dispatch({ type: 'LOG_EVENT', payload: { type: args.type, description: args.description } });
       return { success: true, message: "Event logged to memory." };
     } 
-    
     else if (name === 'queryMemory') {
       const query = args.query.toLowerCase();
       const memories = stateRef.current.guardianData.eventLog.filter(e => 
         e.description.toLowerCase().includes(query) || 
         e.type.toLowerCase().includes(query)
       );
-      
-      return { 
-        found: memories.length > 0, 
-        memories: memories.slice(0, 5) 
-      };
+      return { found: memories.length > 0, memories: memories.slice(0, 5) };
     }
-    
     return { status: "unknown_tool" };
   }, []);
 
-  const handleTranscript = (text: string) => {
-    // In a real app, we'd get transcript chunks from the Live API
-  };
+  const handleTranscript = (text: string) => {};
 
   const { connect, disconnect, isConnected } = useLiveSession({
     onToolCall: handleToolCall,
@@ -184,6 +184,7 @@ const App: React.FC = () => {
       if (!process.env.API_KEY && apiKey) {
         process.env.API_KEY = apiKey;
       }
+      soundEngine.playModeSwitch();
       connect();
     }
   };
@@ -191,72 +192,88 @@ const App: React.FC = () => {
   return (
     <div className="h-screen w-screen bg-black text-white overflow-hidden flex flex-col font-sans relative">
       
-      {/* Top Floating Status Bar */}
-      <div className="absolute top-4 left-4 z-50 flex items-center gap-3 animate-in slide-in-from-top duration-500">
-         <div className={`flex items-center gap-2 px-3 py-1 rounded-full border ${isConnected ? 'border-green-500/50 bg-green-500/10' : 'border-gray-700 bg-gray-800/50'} backdrop-blur-md`}>
-            <Activity className={`${isConnected ? 'text-green-500 animate-pulse' : 'text-gray-500'}`} size={14} />
-            <span className={`font-mono text-[10px] tracking-widest ${isConnected ? 'text-green-500' : 'text-gray-500'}`}>
-                {isConnected ? 'LIVE_LINK_ACTIVE' : 'OFFLINE'}
+      {/* 
+        ACCESSIBILITY HEADER 
+        High contrast status indicators.
+      */}
+      <div className="absolute top-0 left-0 w-full p-4 z-50 flex justify-between pointer-events-none">
+         <div className={`pointer-events-auto flex items-center gap-2 px-4 py-3 rounded-xl border-4 ${isConnected ? 'border-[#FFD600] bg-black text-[#FFD600]' : 'border-gray-600 bg-gray-900 text-gray-400'}`}>
+            <Activity className={`${isConnected ? 'animate-pulse' : ''}`} size={24} strokeWidth={4} />
+            <span className="font-bold text-lg tracking-wider" aria-live="polite">
+                {isConnected ? 'LIVE' : 'OFF'}
             </span>
          </div>
+         
+         <button 
+           onClick={() => dispatch({ type: 'ACTIVATE_GUARDIAN' })}
+           className="pointer-events-auto bg-[#FF4D00] text-white border-4 border-white px-6 py-3 rounded-xl font-black text-xl animate-pulse hover:bg-red-600 active:scale-95 shadow-xl flex items-center gap-2"
+           aria-label="Emergency Help"
+         >
+           <ShieldAlert size={28} strokeWidth={4} /> HELP
+         </button>
       </div>
 
-      {/* SOS Button (Top Right) */}
-      <button 
-           onClick={() => dispatch({ type: 'ACTIVATE_GUARDIAN' })}
-           className="absolute top-4 right-4 z-50 bg-red-600/20 text-red-500 border border-red-500 px-4 py-2 rounded-none skew-x-[-10deg] text-xs font-black animate-pulse hover:bg-red-600 hover:text-white transition-colors"
-      >
-           <span className="skew-x-[10deg] block tracking-widest">SOS // PANIC</span>
-      </button>
-
-      {/* Main Liquid Interface */}
-      <main className="flex-1 relative z-0">
+      {/* 
+        MAIN CONTENT AREA
+        This is the "Liquid Interface".
+      */}
+      <main className="flex-1 relative z-0" role="main" aria-live="assertive">
          <LiquidDisplay state={state} />
       </main>
 
-      {/* Bottom Floating Controls */}
-      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-6 pointer-events-none">
-           {/* Main Power Button */}
+      {/* 
+        BOTTOM CONTROLS 
+        Anchored to bottom center. Massive touch target.
+      */}
+      <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-50 flex items-center justify-center w-full pointer-events-none">
            <button 
              onClick={toggleConnection}
-             className={`pointer-events-auto w-24 h-24 rounded-full flex items-center justify-center border-[6px] transition-all duration-500 shadow-[0_0_30px_rgba(0,0,0,0.5)] active:scale-90 ${
+             className={`pointer-events-auto w-32 h-32 rounded-full flex items-center justify-center border-[8px] transition-all duration-200 active:scale-90 ${
                 isConnected 
-                ? 'border-[#00FF94] bg-[#00FF94]/10 shadow-[0_0_40px_rgba(0,255,148,0.4)]' 
-                : 'border-white/10 bg-white/5 hover:border-white/30'
+                ? 'border-white bg-[#FFD600] text-black shadow-[0_0_50px_rgba(255,214,0,0.8)]' 
+                : 'border-gray-500 bg-gray-800 text-gray-400'
              }`}
+             aria-label={isConnected ? "Stop NeuroSync" : "Start NeuroSync"}
+             title={isConnected ? "Stop" : "Start"}
            >
-             <Power size={36} className={`${isConnected ? "text-[#00FF94]" : "text-white/30"}`} />
+             <Power size={56} strokeWidth={4} />
            </button>
       </div>
 
-      {/* DEBUG / SIMULATOR PANEL */}
-      <div className="fixed top-20 right-4 z-[60]">
-          <button onClick={() => setShowDebug(!showDebug)} className="text-[10px] text-gray-500 hover:text-white uppercase tracking-widest">
-            {showDebug ? '[ - ]' : '[ + ] SIM'}
+      {/* 
+        DEBUG PANEL TRIGGER
+        Hidden in corner, small touch target to avoid accidental hits.
+      */}
+      <div className="fixed top-24 right-4 z-[60]">
+          <button 
+            onClick={() => setShowDebug(!showDebug)} 
+            className="bg-black/50 p-3 rounded-full text-gray-500 hover:text-white border-2 border-gray-700"
+            aria-label="Open Debug Menu"
+          >
+            <Settings size={24} strokeWidth={3} />
           </button>
       </div>
 
       {showDebug && (
-        <div className="fixed top-28 right-4 w-64 bg-black/90 backdrop-blur-xl border border-gray-800 p-4 rounded-none text-xs z-[60] shadow-2xl font-mono">
-          <h3 className="font-bold mb-4 text-white border-b border-gray-800 pb-2">DEV_OVERRIDE</h3>
+        <div className="fixed top-24 right-16 w-72 bg-white border-4 border-black p-4 text-sm z-[60] shadow-2xl text-black font-bold">
+          <h3 className="mb-4 uppercase border-b-4 border-black pb-2 text-xl">Simulator</h3>
           
-          <div className="grid grid-cols-2 gap-2 mb-4">
-             <button onClick={() => dispatch({ type: 'UPDATE_NAV', payload: { direction: 'STRAIGHT', distance: '10m' }})} className="bg-slate-800 p-2 text-gray-300 hover:text-white hover:bg-slate-700 transition-colors">NAV: FWD</button>
-             <button onClick={() => dispatch({ type: 'UPDATE_NAV', payload: { direction: 'LEFT', distance: 'Turn Now' }})} className="bg-slate-800 p-2 text-gray-300 hover:text-white hover:bg-slate-700 transition-colors">NAV: LEFT</button>
-             <button onClick={() => dispatch({ type: 'UPDATE_READ', payload: { text: "MENU: 1. Latte $4  2. Espresso $3" }})} className="bg-slate-800 p-2 text-gray-300 hover:text-white hover:bg-slate-700 transition-colors">READ</button>
-             <button onClick={() => dispatch({ type: 'UPDATE_SCAN', payload: { objectName: "Campbell's Soup", details: "Tomato, 10oz can" }})} className="bg-slate-800 p-2 text-gray-300 hover:text-white hover:bg-slate-700 transition-colors">SCAN</button>
-             <button onClick={() => dispatch({ type: 'TRIGGER_DANGER', payload: "Open Manhole Ahead" })} className="col-span-2 bg-red-900/20 border border-red-900 text-red-500 p-2 hover:bg-red-900/40 transition-colors">! DANGER !</button>
-             <button onClick={() => dispatch({ type: 'LOG_EVENT', payload: { type: 'OBJECT_SEEN', description: "Keys placed on table" }})} className="col-span-2 bg-blue-900/20 border border-blue-900 text-blue-500 p-2 hover:bg-blue-900/40 transition-colors">LOG MEMORY</button>
+          <div className="grid grid-cols-2 gap-3 mb-4">
+             <button onClick={() => dispatch({ type: 'UPDATE_NAV', payload: { direction: 'STRAIGHT', distance: '10m' }})} className="bg-gray-200 p-3 hover:bg-yellow-300 border-2 border-black font-bold">FWD</button>
+             <button onClick={() => dispatch({ type: 'UPDATE_NAV', payload: { direction: 'LEFT', distance: 'Turn' }})} className="bg-gray-200 p-3 hover:bg-yellow-300 border-2 border-black font-bold">LEFT</button>
+             <button onClick={() => dispatch({ type: 'UPDATE_READ', payload: { text: "Latte $4.00" }})} className="bg-gray-200 p-3 hover:bg-yellow-300 border-2 border-black font-bold">READ</button>
+             <button onClick={() => dispatch({ type: 'UPDATE_SCAN', payload: { objectName: "Soup Can", details: "Tomato" }})} className="bg-gray-200 p-3 hover:bg-yellow-300 border-2 border-black font-bold">SCAN</button>
+             <button onClick={() => dispatch({ type: 'TRIGGER_DANGER', payload: "Car Backing Up!" })} className="col-span-2 bg-[#FF4D00] text-white p-3 border-2 border-black font-black uppercase">! DANGER !</button>
+             <button onClick={() => dispatch({ type: 'LOG_EVENT', payload: { type: 'OBJECT_SEEN', description: "Keys on table" }})} className="col-span-2 bg-[#0047AB] text-white p-3 border-2 border-black font-bold">LOG MEMORY</button>
           </div>
 
-          <div className="border-t border-gray-800 pt-2">
-            <label className="block text-gray-600 mb-1">API_KEY</label>
+          <div className="border-t-4 border-black pt-3">
+            <label className="block mb-1 font-bold">API_KEY</label>
             <input 
               type="password" 
               value={apiKey} 
               onChange={(e) => setApiKey(e.target.value)} 
-              className="w-full bg-black border border-gray-800 rounded-none p-2 text-white focus:border-white outline-none"
-              placeholder="sk-..."
+              className="w-full bg-gray-100 border-2 border-black p-3 text-black font-mono"
             />
           </div>
         </div>
