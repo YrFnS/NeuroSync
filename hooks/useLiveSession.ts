@@ -60,7 +60,7 @@ interface UseLiveSessionProps {
   apiKey?: string;
   mode: AppMode;
   location?: { lat: number; lng: number } | null;
-  videoStream: MediaStream | null; // Now accepts external stream
+  videoStream: MediaStream | null; 
 }
 
 export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode, location, videoStream }: UseLiveSessionProps) => {
@@ -82,8 +82,10 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode, locatio
     locationRef.current = location;
   }, [location]);
 
+  // Optimized snapshot getter
   const getSnapshot = useCallback((): string | undefined => {
       if (!canvasRef.current || !videoRef.current) return undefined;
+      // 'willReadFrequently' forces CPU rendering which is faster for frequent readbacks
       const ctx = canvasRef.current.getContext('2d', { willReadFrequently: true });
       if (ctx) {
           ctx.drawImage(videoRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height);
@@ -116,6 +118,7 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode, locatio
         if (!ctx || !videoEl) return;
         if (videoEl.readyState >= 2) {
             ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+            // Lower quality to 0.4 for faster transmission
             const base64 = canvas.toDataURL('image/jpeg', 0.4).split(',')[1];
             try {
                 const session = await sessionPromise;
@@ -137,9 +140,13 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode, locatio
     if (!videoStream) { setError("Camera not ready"); return; }
 
     try {
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-      await audioContext.resume();
-      audioContextRef.current = audioContext;
+      // Reuse existing context if available to prevent memory leaks
+      let audioContext = audioContextRef.current;
+      if (!audioContext || audioContext.state === 'closed') {
+         audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+         audioContextRef.current = audioContext;
+      }
+      if (audioContext.state === 'suspended') await audioContext.resume();
 
       const ai = new GoogleGenAI({ apiKey: key });
       
@@ -266,14 +273,11 @@ Context: ${now.toLocaleTimeString()}, Location: ${locString}`;
         videoIntervalRef.current = null;
     }
     
-    // We DO NOT stop the videoStream tracks here because useCamera owns them now.
-    
     if (audioContextRef.current) {
         audioContextRef.current.close();
         audioContextRef.current = null;
     }
     
-    // Reset state but don't reload page
     setIsConnected(false);
     setIsStreaming(false);
   }, []);
