@@ -47,18 +47,15 @@ A safety net for when AI isn't enough.
 
 ---
 
-## 🎨 Accessibility Design Philosophy ("Hyper-Legible Industrial")
+## 🕹️ Gestures & Controls
 
-We rejected standard "Cyberpunk" or "Modern Clean" aesthetics in favor of **WCAG 2.1 AAA** compliance and functional brutality.
+Since the user may not see the screen, the entire app is controlled via a **Gesture Layer**:
 
-1.  **Typography**: **Atkinson Hyperlegible**. Developed by the Braille Institute, this font focuses on letterform distinction to increase character recognition for low-vision readers.
-2.  **Color Palette**:
-    *   **Void Black (`#000000`)**: Maximizes contrast on OLED screens and reduces glare/photophobia.
-    *   **Safety Yellow (`#FFD600`)**: The most visible color to the human eye, used for primary actions.
-    *   **Signal Orange (`#FF4D00`)**: Reserved exclusively for STOP/DANGER signals.
-3.  **Haptics & Audio**:
-    *   **Synthetic Audio Engine**: Custom Web Audio API implementation generates zero-latency interface sounds (clicks, hums, alarms) without relying on slow external MP3 assets.
-    *   **Edge Anchoring**: Buttons are anchored to screen corners, allowing users to find controls by feeling the physical edge of their device.
+*   **Double Tap Screen**: Connect / Disconnect from AI.
+*   **Shake Device**: RESET interface (Emergency exit from any mode to IDLE).
+*   **Two-Finger Swipe Down**: Toggle Privacy Curtain (Blacks out screen for privacy while keeping AI active).
+*   **Long Press (1.2s)**: Trigger SOS / Guardian Mode.
+*   **Single Tap**: Hear Status Report (Battery Level + Current Mode).
 
 ---
 
@@ -66,23 +63,25 @@ We rejected standard "Cyberpunk" or "Modern Clean" aesthetics in favor of **WCAG
 
 *   **Frontend**: React 19, Tailwind CSS.
 *   **AI Model**: Google Gemini 2.5 Flash (Multimodal Live API) via WebSockets.
-*   **Audio**: Native Web Audio API (Oscillators/GainNodes) for synthesizer-based feedback.
+*   **Audio**: Native Web Audio API (Oscillators/GainNodes) for synthesizer-based feedback with Audio Ducking.
 *   **Maps**: Leaflet.js with Dark Mode tiles.
 *   **State Management**: React `useReducer` for complex multimodal state transitions.
 
 ## 📦 Setup
 
 1.  Clone the repository.
-2.  Create a `.env` file with your Gemini API Key:
-    ```
-    API_KEY=your_google_genai_api_key
-    ```
-3.  Run the development server.
+2.  Install dependencies:
     ```bash
     npm install
+    ```
+3.  **API Key Configuration**:
+    *   You can create a `.env` file: `API_KEY=your_key`
+    *   **OR** enter the key at runtime: Tap the "Settings/Gear" icon in the top right (visible in Debug Mode) to enter your key directly in the app.
+4.  Run the development server:
+    ```bash
     npm start
     ```
-4.  Open in a browser (Chrome/Edge recommended for WebRTC support).
+5.  Open in a browser (Chrome/Edge recommended for WebRTC support).
 
 ---
 

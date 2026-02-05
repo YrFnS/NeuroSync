@@ -119,6 +119,7 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode, locatio
         
         ctx.drawImage(videoEl, 0, 0, canvasRef.current!.width, canvasRef.current!.height);
         
+        // JPEG compression 0.5 is a good balance for speed/quality
         const base64 = canvasRef.current!.toDataURL('image/jpeg', 0.5).split(',')[1];
         
         try {
