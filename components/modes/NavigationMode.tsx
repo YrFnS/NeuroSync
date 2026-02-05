@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { AlertTriangle, Disc, Hand, Compass } from 'lucide-react';
 import { NeuroState } from '../../types';
 import { soundEngine } from '../../utils/soundEngine';
@@ -6,6 +6,7 @@ import { soundEngine } from '../../utils/soundEngine';
 export const NavigationMode: React.FC<{ data: NeuroState['navData'] }> = ({ data }) => {
   const [heading, setHeading] = useState(0);
   const [needsPermission, setNeedsPermission] = useState(false);
+  const lastHapticTime = useRef(0);
 
   useEffect(() => {
     // Check if permission is needed (iOS 13+)
@@ -18,21 +19,26 @@ export const NavigationMode: React.FC<{ data: NeuroState['navData'] }> = ({ data
 
     const handleOrientation = (e: DeviceOrientationEvent) => {
         let h = 0;
-        // iOS uses webkitCompassHeading, Standard uses alpha
         if ((e as any).webkitCompassHeading) {
             h = (e as any).webkitCompassHeading;
         } else if (e.alpha !== null) {
-            // Convert alpha to compass heading (approximate for standard logic)
             h = 360 - e.alpha; 
         }
         
         setHeading(h);
 
-        // "North Notch" - Tactile feedback when facing North
-        if (h > 355 || h < 5) {
-            if (Math.random() > 0.8) {
-                if (navigator.vibrate) navigator.vibrate(5);
-                soundEngine.playCompassTick();
+        // --- HAPTIC COMPASS LOGIC ---
+        // Vibrate when facing North (350-10 degrees)
+        // Double Pulse for North, Single Pulse for East/West/South
+        const now = Date.now();
+        if (now - lastHapticTime.current > 600) { // Throttle
+            if (h > 350 || h < 10) {
+                 if (navigator.vibrate) navigator.vibrate([20, 50, 20]); // Double Tick
+                 lastHapticTime.current = now;
+                 soundEngine.playCompassTick();
+            } else if (Math.abs(h - 90) < 5 || Math.abs(h - 180) < 5 || Math.abs(h - 270) < 5) {
+                 if (navigator.vibrate) navigator.vibrate(20); // Single Tick
+                 lastHapticTime.current = now;
             }
         }
     };
@@ -52,7 +58,6 @@ export const NavigationMode: React.FC<{ data: NeuroState['navData'] }> = ({ data
             .then((response: string) => {
                 if (response === 'granted') {
                     setNeedsPermission(false);
-                    // Force reload/re-bind logic implicitly by state change or explicit add
                 } else {
                     alert('Permission denied. Compass disabled.');
                 }
@@ -93,13 +98,22 @@ export const NavigationMode: React.FC<{ data: NeuroState['navData'] }> = ({ data
   return (
     <div className={`flex flex-col h-full w-full ${bgColor} ${textColor} transition-colors duration-300 relative overflow-hidden rounded-3xl border-4 border-white shadow-2xl`}>
       
+      {/* ACTIVE RADAR SWEEP */}
+      <div className="absolute inset-0 rounded-3xl overflow-hidden pointer-events-none">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[150vw] h-[150vw] bg-gradient-to-r from-transparent via-white/20 to-transparent animate-[spin_4s_linear_infinite]" />
+      </div>
+
       {/* COMPASS RING */}
-      <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none overflow-hidden">
+      <div className="absolute inset-0 flex items-center justify-center opacity-20 pointer-events-none overflow-hidden">
           <div 
-             className="w-[120vw] h-[120vw] border-[20px] border-dashed border-current rounded-full flex items-center justify-center transition-transform duration-200 ease-out"
+             className="w-[120vw] h-[120vw] border-[40px] border-dashed border-current rounded-full flex items-center justify-center transition-transform duration-200 ease-out"
              style={{ transform: `rotate(${-heading}deg)` }}
           >
-              <div className="absolute top-0 w-8 h-20 bg-current"></div>
+              <div className="absolute top-0 w-8 h-24 bg-current"></div>
+              {/* East/West/South notches */}
+              <div className="absolute right-0 w-8 h-12 bg-current opacity-50"></div>
+              <div className="absolute bottom-0 w-8 h-12 bg-current opacity-50"></div>
+              <div className="absolute left-0 w-8 h-12 bg-current opacity-50"></div>
           </div>
       </div>
 
@@ -141,7 +155,7 @@ export const NavigationMode: React.FC<{ data: NeuroState['navData'] }> = ({ data
             ) : (
                 <div className="flex items-center gap-2 mt-2 opacity-60">
                     <Compass size={24} className={heading > 350 || heading < 10 ? 'text-white fill-current' : ''} />
-                    <span className="font-mono font-bold">{Math.round(heading)}°</span>
+                    <span className="font-mono font-bold">{Math.round(heading)}° {heading > 350 || heading < 10 ? 'NORTH' : ''}</span>
                 </div>
             )}
           </div>

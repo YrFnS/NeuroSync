@@ -42,6 +42,7 @@ export interface EnvironmentalEvent {
 export interface GuardianData {
   active: boolean;
   location?: { lat: number; lng: number };
+  locationHistory: Array<{ lat: number; lng: number }>; // Breadcrumbs
   transcript: string[];
   eventLog: EnvironmentalEvent[];
   plan?: EmergencyPlan;

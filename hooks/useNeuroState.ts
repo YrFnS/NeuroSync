@@ -12,7 +12,7 @@ const loadMemory = (): EnvironmentalEvent[] => {
 
 const initialState: NeuroState = {
   mode: AppMode.IDLE,
-  guardianData: { active: false, transcript: [], eventLog: loadMemory() },
+  guardianData: { active: false, transcript: [], eventLog: loadMemory(), locationHistory: [] },
   isAudioStreaming: false,
 };
 
@@ -74,11 +74,20 @@ function reducer(state: NeuroState, action: ActionType): NeuroState {
           }
       };
     case 'UPDATE_LOCATION':
+      // Append new location to history if it has moved significantly (approx 5 meters)
+      const lastLoc = state.guardianData.locationHistory[state.guardianData.locationHistory.length - 1];
+      let newHistory = state.guardianData.locationHistory;
+      
+      if (!lastLoc || (Math.abs(lastLoc.lat - action.payload.lat) > 0.0001 || Math.abs(lastLoc.lng - action.payload.lng) > 0.0001)) {
+          newHistory = [...newHistory, action.payload].slice(-100); // Keep last 100 points
+      }
+
       return {
           ...state,
           guardianData: {
               ...state.guardianData,
-              location: action.payload
+              location: action.payload,
+              locationHistory: newHistory
           }
       };
     case 'SET_STREAMING':

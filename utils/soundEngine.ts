@@ -1,12 +1,14 @@
 // A pure Web Audio API synthesizer for sci-fi interface sounds
-// Now with 3D Spatial Audio (Stereo Panning) & Native TTS
+// Now with 3D Spatial Audio, Native TTS, and Audio Analysis
 
 class SoundEngine {
     private ctx: AudioContext | null = null;
     private masterGain: GainNode | null = null;
-    private sfxGain: GainNode | null = null; // Separate gain for SFX (Sonar/Beeps)
+    private sfxGain: GainNode | null = null;
     private panner: StereoPannerNode | null = null;
     private sonarInterval: number | null = null;
+    private droneOsc: OscillatorNode | null = null;
+    private droneGain: GainNode | null = null;
     private synth: SpeechSynthesis = window.speechSynthesis;
     private duckTimer: NodeJS.Timeout | null = null;
   
@@ -14,30 +16,26 @@ class SoundEngine {
       // Defer initialization
     }
   
-    private init() {
+    public init() {
       if (!this.ctx) {
         const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
         this.ctx = new AudioCtx();
         
-        // Master Gain (Final Output)
         this.masterGain = this.ctx.createGain();
         this.masterGain.gain.value = 1.0;
         this.masterGain.connect(this.ctx.destination);
 
-        // SFX Gain (For Sonar/Beeps - This gets Ducked)
         this.sfxGain = this.ctx.createGain();
-        this.sfxGain.gain.value = 0.3; // Default SFX volume
+        this.sfxGain.gain.value = 0.3;
         
-        // Spatial Panner
         if (this.ctx.createStereoPanner) {
             this.panner = this.ctx.createStereoPanner();
-            this.panner.pan.value = 0; // Center
+            this.panner.pan.value = 0;
             this.panner.connect(this.sfxGain);
         } else {
-             // Fallback logic could go here
+             // Fallback
         }
         
-        // Connect SFX chain to Master
         this.sfxGain.connect(this.masterGain);
       }
       if (this.ctx?.state === 'suspended') {
@@ -45,39 +43,41 @@ class SoundEngine {
       }
     }
 
-    /**
-     * Lowers SFX volume temporarily while AI is speaking.
-     */
+    public getContext(): AudioContext | null {
+        this.init();
+        return this.ctx;
+    }
+
+    // Creates an analyser node from a media stream (for the Idle Visualizer)
+    public createAnalyser(stream: MediaStream): AnalyserNode | null {
+        this.init();
+        if (!this.ctx) return null;
+        
+        const source = this.ctx.createMediaStreamSource(stream);
+        const analyser = this.ctx.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        // Do not connect to destination to avoid feedback loop
+        return analyser;
+    }
+
     public duck() {
         this.init();
         if (!this.sfxGain || !this.ctx) return;
-        
-        // Cancel any pending unduck
         if (this.duckTimer) clearTimeout(this.duckTimer);
-
-        // Ramp down immediately
         this.sfxGain.gain.setTargetAtTime(0.05, this.ctx.currentTime, 0.1);
-
-        // Auto unduck after 2 seconds if not called again (safety)
         this.duckTimer = setTimeout(() => this.unduck(), 2000);
     }
 
-    /**
-     * Restores SFX volume.
-     */
     public unduck() {
         this.init();
         if (!this.sfxGain || !this.ctx) return;
         if (this.duckTimer) clearTimeout(this.duckTimer);
-        
-        // Ramp back up smoothly
         this.sfxGain.gain.setTargetAtTime(0.3, this.ctx.currentTime, 0.5);
     }
 
     public speakSystem(text: string) {
         if (!this.synth) return;
-        
-        // Duck SFX when system speaks
         this.duck();
 
         if (this.synth.speaking) {
@@ -87,11 +87,7 @@ class SoundEngine {
         utterance.rate = 1.2; 
         utterance.pitch = 1.0;
         utterance.volume = 1.0;
-        
-        utterance.onend = () => {
-             this.unduck();
-        };
-
+        utterance.onend = () => { this.unduck(); };
         this.synth.speak(utterance);
     }
 
@@ -102,6 +98,25 @@ class SoundEngine {
         }
     }
 
+    // Ambient Drone for "System Alive" feel
+    public startDrone() {
+        this.init();
+        if (!this.ctx || !this.masterGain || this.droneOsc) return;
+
+        this.droneOsc = this.ctx.createOscillator();
+        this.droneGain = this.ctx.createGain();
+        
+        this.droneOsc.type = 'sine';
+        this.droneOsc.frequency.setValueAtTime(55, this.ctx.currentTime); // Low A
+        
+        this.droneGain.gain.setValueAtTime(0, this.ctx.currentTime);
+        this.droneGain.gain.linearRampToValueAtTime(0.05, this.ctx.currentTime + 2); // Subtle
+
+        this.droneOsc.connect(this.droneGain);
+        this.droneGain.connect(this.masterGain);
+        this.droneOsc.start();
+    }
+
     public playCompassTick() {
         this.init();
         if (!this.ctx || !this.sfxGain) return;
@@ -110,7 +125,7 @@ class SoundEngine {
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.connect(gain);
-        gain.connect(this.sfxGain); // Connect to SFX bus
+        gain.connect(this.sfxGain);
 
         osc.type = 'square';
         osc.frequency.setValueAtTime(800, this.ctx.currentTime);
@@ -148,14 +163,12 @@ class SoundEngine {
       osc.stop(this.ctx.currentTime + 0.3);
     }
 
-    // "Glitch/Rewind" sound for Reset
     public playReset() {
         this.init();
-        if (!this.ctx || !this.masterGain) return; // Master gain (bypass ducking for reset feedback)
+        if (!this.ctx || !this.masterGain) return;
 
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
-        
         osc.connect(gain);
         gain.connect(this.masterGain);
 
@@ -172,7 +185,7 @@ class SoundEngine {
   
     public playDangerAlarm() {
       this.init();
-      if (!this.ctx || !this.masterGain) return; // Danger bypasses ducking
+      if (!this.ctx || !this.masterGain) return; 
       this.setPan(0); 
   
       const osc = this.ctx.createOscillator();

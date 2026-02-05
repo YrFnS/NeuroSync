@@ -39,7 +39,7 @@ export const LiquidDisplay: React.FC<Props> = ({ state, videoStream, onExitGuard
       
       {/* Modes Content */}
       <div className={`relative z-10 ${containerClass} flex flex-col`}>
-        {state.mode === AppMode.IDLE && <IdleMode />}
+        {state.mode === AppMode.IDLE && <IdleMode audioStream={videoStream} />}
         {state.mode === AppMode.NAVIGATION && <NavigationMode data={state.navData} />}
         {state.mode === AppMode.READING && <ReadingMode data={state.readData} />}
         {state.mode === AppMode.SCANNING && <ScanningMode data={state.scanData} />}

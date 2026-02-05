@@ -17,6 +17,7 @@ export const GuardianMode: React.FC<Props> = ({ data, videoStream, onExit }) => 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersRef = useRef<L.LayerGroup>(L.layerGroup());
+  const pathRef = useRef<L.Polyline | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const link = `https://neurosync.app/live/${Math.random().toString(36).substring(7)}`;
 
@@ -59,10 +60,9 @@ export const GuardianMode: React.FC<Props> = ({ data, videoStream, onExit }) => 
             });
             return;
         } catch (e) {
-            // Fallback to copy if share fails or cancelled
+            // Fallback
         }
     }
-    
     navigator.clipboard.writeText(link);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -99,6 +99,23 @@ export const GuardianMode: React.FC<Props> = ({ data, videoStream, onExit }) => 
     const map = mapInstanceRef.current;
     if (!map) return;
     markersRef.current.clearLayers();
+
+    // 0. Update Breadcrumb Trail
+    if (data.locationHistory.length > 1) {
+        const latLngs = data.locationHistory.map(loc => [loc.lat, loc.lng] as L.LatLngExpression);
+        
+        if (pathRef.current) {
+            pathRef.current.setLatLngs(latLngs);
+        } else {
+            pathRef.current = L.polyline(latLngs, {
+                color: '#00FF94',
+                weight: 3,
+                opacity: 0.5,
+                dashArray: '10, 10',
+                lineCap: 'round'
+            }).addTo(map);
+        }
+    }
 
     // 1. Add User Marker
     if (data.location) {
@@ -140,7 +157,7 @@ export const GuardianMode: React.FC<Props> = ({ data, videoStream, onExit }) => 
         }
     });
 
-  }, [data.location, data.eventLog]);
+  }, [data.location, data.eventLog, data.locationHistory]);
 
   return (
     <div className="flex flex-col h-full w-full bg-[#050505] p-2 md:p-4 animate-in slide-in-from-right duration-500 overflow-y-auto pb-safe font-mono">

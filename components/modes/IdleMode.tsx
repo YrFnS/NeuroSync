@@ -1,54 +1,136 @@
-import React from 'react';
-import { Mic, Activity, Ear, Eye, Radio } from 'lucide-react';
+import React, { useEffect, useRef } from 'react';
+import { Radio } from 'lucide-react';
+import { soundEngine } from '../../utils/soundEngine';
 
-export const IdleMode = () => (
-  <div className="flex flex-col items-center justify-center h-full w-full bg-neuro-bg text-neuro-text p-6 text-center animate-in fade-in duration-500">
+interface Props {
+    audioStream: MediaStream | null;
+}
+
+export const IdleMode: React.FC<Props> = ({ audioStream }) => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animationFrameRef = useRef<number>(0);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+
+  useEffect(() => {
+    if (!audioStream) return;
     
-    <div className="relative mb-12">
-        {/* Acoustic Ripple */}
-        <div className="absolute inset-0 bg-blue-500 rounded-full opacity-10 animate-[ping_2s_cubic-bezier(0,0,0.2,1)_infinite]"></div>
-        {/* Visual Ripple */}
-        <div className="absolute inset-0 bg-[#FFD600] rounded-full opacity-10 animate-[ping_2s_cubic-bezier(0,0,0.2,1)_infinite_1s]"></div>
+    // Connect stream to analyser
+    analyserRef.current = soundEngine.createAnalyser(audioStream);
+
+    const render = () => {
+        const canvas = canvasRef.current;
+        const ctx = canvas?.getContext('2d');
+        const analyser = analyserRef.current;
         
-        <div className="w-64 h-64 border-[12px] border-neuro-text/5 rounded-full flex items-center justify-center relative bg-neuro-bg/50 backdrop-blur-sm overflow-hidden">
-           
-           {/* Inner Core */}
-           <div className="w-40 h-40 bg-neuro-ui rounded-full flex items-center justify-center shadow-[0_0_50px_rgba(255,214,0,0.2)] border-4 border-[#FFD600] z-10 relative">
-              <div className="flex flex-col items-center gap-2">
-                 <div className="flex gap-4 items-center">
-                    <Ear size={28} className="text-blue-400 animate-pulse" strokeWidth={2.5} />
-                    <div className="h-6 w-0.5 bg-gray-500"></div>
-                    <Eye size={28} className="text-[#FFD600] animate-pulse" strokeWidth={2.5} />
-                 </div>
-                 <span className="text-[10px] uppercase font-bold opacity-50 tracking-widest mt-1">SENSORS ON</span>
-              </div>
-           </div>
+        if (canvas && ctx && analyser) {
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            analyser.getByteFrequencyData(dataArray);
 
-           {/* Orbiting Sensor Ring */}
-           <div className="absolute w-full h-full animate-[spin_4s_linear_infinite] opacity-50 pointer-events-none">
-               <div className="w-3 h-3 bg-[#FFD600] rounded-full absolute top-5 left-1/2 -translate-x-1/2 shadow-[0_0_15px_#FFD600]"></div>
-               <div className="w-3 h-3 bg-blue-500 rounded-full absolute bottom-5 left-1/2 -translate-x-1/2 shadow-[0_0_15px_#3B82F6]"></div>
-           </div>
-        </div>
+            const w = canvas.width;
+            const h = canvas.height;
+            const cx = w / 2;
+            const cy = h / 2;
+
+            ctx.clearRect(0, 0, w, h);
+            
+            // Draw "Neuro-Core"
+            // Base Circle
+            ctx.beginPath();
+            const baseRadius = Math.min(w, h) * 0.25;
+            
+            // Average volume for pulsing
+            let sum = 0;
+            for(let i = 0; i < bufferLength; i++) sum += dataArray[i];
+            const avg = sum / bufferLength;
+            const pulse = 1 + (avg / 255) * 0.5;
+
+            // Draw Wireframe Sphere
+            ctx.strokeStyle = '#00FF94'; // Signal Green
+            ctx.lineWidth = 2;
+            
+            // Generate distorted circle based on frequency
+            ctx.beginPath();
+            for (let i = 0; i <= 360; i += 5) {
+                const angle = (i * Math.PI) / 180;
+                // Map angle to frequency index roughly
+                const idx = Math.floor((i / 360) * bufferLength);
+                const val = dataArray[idx] || 0;
+                const r = baseRadius * pulse + (val * 0.5);
+                
+                const x = cx + Math.cos(angle) * r;
+                const y = cy + Math.sin(angle) * r;
+                
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.stroke();
+
+            // Inner Core (Secondary Frequency)
+            ctx.beginPath();
+            ctx.strokeStyle = '#FFD600'; // Safety Yellow
+            for (let i = 0; i <= 360; i += 10) {
+                const angle = -(i * Math.PI) / 180; // Reverse spin
+                const idx = Math.floor(((i + 50) % 360 / 360) * bufferLength);
+                const val = dataArray[idx] || 0;
+                const r = (baseRadius * 0.6) * pulse + (val * 0.2);
+                
+                const x = cx + Math.cos(angle) * r;
+                const y = cy + Math.sin(angle) * r;
+                
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.stroke();
+
+            // Connecting lines (Synapses)
+            if (avg > 10) {
+                ctx.strokeStyle = `rgba(0, 255, 148, ${avg/255})`;
+                ctx.beginPath();
+                ctx.moveTo(cx, cy);
+                const maxValIdx = dataArray.indexOf(Math.max(...dataArray));
+                const angle = (maxValIdx / bufferLength) * Math.PI * 2;
+                const r = baseRadius * 1.5;
+                ctx.lineTo(cx + Math.cos(angle)*r, cy + Math.sin(angle)*r);
+                ctx.stroke();
+            }
+        }
+        animationFrameRef.current = requestAnimationFrame(render);
+    };
+
+    render();
+
+    return () => {
+        cancelAnimationFrame(animationFrameRef.current);
+    };
+  }, [audioStream]);
+
+  // Handle Resize
+  useEffect(() => {
+     const handleResize = () => {
+         if (canvasRef.current) {
+             canvasRef.current.width = window.innerWidth;
+             canvasRef.current.height = window.innerHeight;
+         }
+     };
+     window.addEventListener('resize', handleResize);
+     handleResize();
+     return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  return (
+    <div className="absolute inset-0 w-full h-full bg-black flex flex-col items-center justify-center">
+      <canvas ref={canvasRef} className="absolute inset-0 z-0 opacity-80" />
+      
+      <div className="relative z-10 text-center pointer-events-none mix-blend-difference">
+         <h1 className="text-[12vw] font-black tracking-tighter text-white opacity-90 leading-none">NEURO<br/>SYNC</h1>
+         <div className="flex items-center justify-center gap-2 mt-4">
+             <Radio className="text-white animate-pulse" size={16} />
+             <span className="font-mono text-sm tracking-[0.2em] text-white">LISTENING...</span>
+         </div>
+      </div>
     </div>
-    
-    <h1 className="text-6xl font-black tracking-tight mb-4" aria-label="Status: Active">AWARE</h1>
-    
-    <div className="bg-neuro-ui border-l-8 border-[#FFD600] p-6 text-left max-w-sm w-full rounded-r-xl backdrop-blur-md">
-        <div className="flex items-center gap-3 mb-3">
-            <Radio className="text-[#FFD600] animate-pulse" />
-            <p className="text-xl font-bold">Multimodal Scan</p>
-        </div>
-        <div className="space-y-2">
-            <p className="text-sm opacity-60 flex items-center gap-3">
-                <span className="w-2 h-2 bg-[#FFD600] rounded-full shadow-[0_0_5px_#FFD600]"></span> 
-                <span className="font-mono uppercase tracking-wide">Video Feed Active</span>
-            </p>
-            <p className="text-sm opacity-60 flex items-center gap-3">
-                <span className="w-2 h-2 bg-blue-400 rounded-full shadow-[0_0_5px_#60A5FA]"></span> 
-                <span className="font-mono uppercase tracking-wide">Acoustic Detect Active</span>
-            </p>
-        </div>
-    </div>
-  </div>
-);
+  );
+};
