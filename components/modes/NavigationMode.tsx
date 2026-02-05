@@ -7,6 +7,8 @@ export const NavigationMode: React.FC<{ data: NeuroState['navData'] }> = ({ data
   const [heading, setHeading] = useState(0);
   const [needsPermission, setNeedsPermission] = useState(false);
   const lastHapticTime = useRef(0);
+  const rAF = useRef<number>(0);
+  const pendingHeading = useRef<number | null>(null);
 
   useEffect(() => {
     // Check if permission is needed (iOS 13+)
@@ -17,6 +19,15 @@ export const NavigationMode: React.FC<{ data: NeuroState['navData'] }> = ({ data
         setNeedsPermission(true);
     }
 
+    const updateHeading = () => {
+        if (pendingHeading.current !== null) {
+            setHeading(pendingHeading.current);
+            pendingHeading.current = null;
+        }
+        rAF.current = requestAnimationFrame(updateHeading);
+    };
+    rAF.current = requestAnimationFrame(updateHeading);
+
     const handleOrientation = (e: DeviceOrientationEvent) => {
         let h = 0;
         if ((e as any).webkitCompassHeading) {
@@ -25,11 +36,11 @@ export const NavigationMode: React.FC<{ data: NeuroState['navData'] }> = ({ data
             h = 360 - e.alpha; 
         }
         
-        setHeading(h);
+        // Store for RAF
+        pendingHeading.current = h;
 
         // --- HAPTIC COMPASS LOGIC ---
         // Vibrate when facing North (350-10 degrees)
-        // Double Pulse for North, Single Pulse for East/West/South
         const now = Date.now();
         if (now - lastHapticTime.current > 600) { // Throttle
             if (h > 350 || h < 10) {
@@ -49,6 +60,7 @@ export const NavigationMode: React.FC<{ data: NeuroState['navData'] }> = ({ data
 
     return () => {
         window.removeEventListener('deviceorientation', handleOrientation);
+        cancelAnimationFrame(rAF.current);
     };
   }, [needsPermission]);
 

@@ -4,14 +4,27 @@ import { MODEL_NAME, SYSTEM_INSTRUCTION, TOOLS } from '../constants';
 import { AppMode } from '../types';
 import { soundEngine } from '../utils/soundEngine';
 
-// Helper for audio blob creation
-function createBlob(data: Float32Array): Blob {
-  const l = data.length;
-  const int16 = new Int16Array(l);
-  for (let i = 0; i < l; i++) {
-    int16[i] = data[i] * 32768;
+// High-performance direct buffer conversion
+// Eliminates Blob and FileReader GC pressure
+function floatTo16BitPCMBase64(float32: Float32Array): string {
+  const len = float32.length;
+  const int16 = new Int16Array(len);
+  
+  for (let i = 0; i < len; i++) {
+    const s = Math.max(-1, Math.min(1, float32[i]));
+    int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
   }
-  return new Blob([new Uint8Array(int16.buffer)], { type: 'audio/pcm' });
+  
+  // Efficiently convert buffer to binary string
+  let binary = '';
+  const bytes = new Uint8Array(int16.buffer);
+  const l = bytes.byteLength;
+  // Process in chunks to prevent stack overflow on large buffers
+  for (let i = 0; i < l; i += 32768) { 
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + 32768, l)) as unknown as number[]);
+  }
+  
+  return btoa(binary);
 }
 
 // Helper to decode audio
@@ -76,7 +89,7 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode, locatio
 
   const getSnapshot = useCallback((): string | undefined => {
       if (!canvasRef.current || !videoRef.current) return undefined;
-      const ctx = canvasRef.current.getContext('2d');
+      const ctx = canvasRef.current.getContext('2d', { willReadFrequently: true });
       if (ctx) {
           ctx.drawImage(videoRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height);
           return canvasRef.current.toDataURL('image/jpeg', 0.6);
@@ -110,28 +123,32 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode, locatio
             break;
     }
 
-    const ctx = canvasRef.current.getContext('2d');
+    const ctx = canvasRef.current.getContext('2d', { willReadFrequently: true });
     const videoEl = videoRef.current;
     const sessionPromise = sessionRef.current;
+    const canvas = canvasRef.current;
 
     videoIntervalRef.current = window.setInterval(async () => {
         if (!ctx || !videoEl) return;
         
-        ctx.drawImage(videoEl, 0, 0, canvasRef.current!.width, canvasRef.current!.height);
-        
-        // JPEG compression 0.5 is a good balance for speed/quality
-        const base64 = canvasRef.current!.toDataURL('image/jpeg', 0.5).split(',')[1];
-        
-        try {
-            const session = await sessionPromise;
-            session.sendRealtimeInput({
-                media: {
-                    mimeType: 'image/jpeg',
-                    data: base64
-                }
-            });
-        } catch (err) {
-            console.error("Frame send error:", err);
+        // Only draw if we have a frame
+        if (videoEl.readyState >= 2) {
+            ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+            
+            // JPEG compression 0.4 is sufficient for AI analysis and faster than 0.5
+            const base64 = canvas.toDataURL('image/jpeg', 0.4).split(',')[1];
+            
+            try {
+                const session = await sessionPromise;
+                session.sendRealtimeInput({
+                    media: {
+                        mimeType: 'image/jpeg',
+                        data: base64
+                    }
+                });
+            } catch (err) {
+                console.error("Frame send error:", err);
+            }
         }
 
     }, intervalMs);
@@ -174,19 +191,13 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode, locatio
 
       // PREPARE CONTEXT BEFORE CONNECTING
       const now = new Date();
-      const timeString = now.toLocaleTimeString();
-      const dateString = now.toLocaleDateString();
       let locString = "Unknown";
       if (locationRef.current) {
           locString = `${locationRef.current.lat.toFixed(5)}, ${locationRef.current.lng.toFixed(5)}`;
       }
       
       const dynamicSystemInstruction = `${SYSTEM_INSTRUCTION}
-
-**CURRENT SYSTEM CONTEXT**
-Timestamp: ${dateString} ${timeString}
-User Location (GPS): ${locString}
-Visibility: Conditions may vary. Rely on audio cues if video is dark.`;
+Context: ${now.toLocaleTimeString()}, Location: ${locString}`;
 
       const sessionPromise = ai.live.connect({
         model: MODEL_NAME,
@@ -214,23 +225,17 @@ Visibility: Conditions may vary. Rely on audio cues if video is dark.`;
             
             processor.onaudioprocess = (e) => {
                const inputData = e.inputBuffer.getChannelData(0);
-               const blob = createBlob(inputData);
                
+               // OPTIMIZED: Direct buffer conversion
+               const base64Data = floatTo16BitPCMBase64(inputData);
+
                sessionPromise.then(session => {
-                  const reader = new FileReader();
-                  reader.onloadend = () => {
-                    const res = reader.result as string;
-                    if (res && res.includes(',')) {
-                        const base64data = res.split(',')[1];
-                        session.sendRealtimeInput({
-                            media: {
-                                mimeType: 'audio/pcm;rate=16000',
-                                data: base64data
-                            }
-                        });
-                    }
-                  };
-                  reader.readAsDataURL(blob);
+                  session.sendRealtimeInput({
+                      media: {
+                          mimeType: 'audio/pcm;rate=16000',
+                          data: base64Data
+                      }
+                  });
                });
             };
             source.connect(processor);
@@ -238,20 +243,17 @@ Visibility: Conditions may vary. Rely on audio cues if video is dark.`;
           },
           onmessage: async (msg: LiveServerMessage) => {
             // Handle Transcripts
-            const inputTranscript = msg.serverContent?.inputTranscription?.text;
-            if (inputTranscript) {
-                onTranscript(inputTranscript, true);
+            if (msg.serverContent?.inputTranscription?.text) {
+                onTranscript(msg.serverContent.inputTranscription.text, true);
             }
-            const outputTranscript = msg.serverContent?.outputTranscription?.text;
-            if (outputTranscript) {
-                onTranscript(outputTranscript, false);
+            if (msg.serverContent?.outputTranscription?.text) {
+                onTranscript(msg.serverContent.outputTranscription.text, false);
             }
 
             // Handle Audio Output
             const audioData = msg.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (audioData && audioContextRef.current) {
                 // *** AUDIO DUCKING ***
-                // Lower UI volume when AI speaks
                 soundEngine.duck();
 
                 const ctx = audioContextRef.current;

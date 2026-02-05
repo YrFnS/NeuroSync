@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, memo } from 'react';
 import { AppMode, NeuroState } from '../types';
 import { NavigationMode } from './modes/NavigationMode';
 import { ReadingMode } from './modes/ReadingMode';
@@ -13,6 +13,14 @@ interface Props {
   videoStream: MediaStream | null;
   onExitGuardian: () => void;
 }
+
+// Memoized Wrappers
+const MemoIdle = memo(IdleMode);
+const MemoNavigation = memo(NavigationMode);
+const MemoReading = memo(ReadingMode);
+const MemoScanning = memo(ScanningMode);
+const MemoDanger = memo(DangerMode);
+const MemoGuardian = memo(GuardianMode);
 
 export const LiquidDisplay: React.FC<Props> = ({ state, videoStream, onExitGuardian }) => {
   const [showMemoryToast, setShowMemoryToast] = useState<string | null>(null);
@@ -30,7 +38,6 @@ export const LiquidDisplay: React.FC<Props> = ({ state, videoStream, onExitGuard
   }, [state.guardianData.eventLog, state.mode]);
 
   const isGuardian = state.mode === AppMode.GUARDIAN;
-  const isDanger = state.mode === AppMode.DANGER;
 
   // Safe area padding for modes that coexist with global UI (Header/Footer)
   const containerClass = isGuardian ? "w-full h-full" : "w-full h-full pt-28 pb-40 px-4";
@@ -40,13 +47,13 @@ export const LiquidDisplay: React.FC<Props> = ({ state, videoStream, onExitGuard
       
       {/* Modes Content */}
       <div className={`relative z-10 ${containerClass} flex flex-col`}>
-        {state.mode === AppMode.IDLE && <IdleMode audioStream={videoStream} />}
-        {state.mode === AppMode.NAVIGATION && <NavigationMode data={state.navData} />}
-        {state.mode === AppMode.READING && <ReadingMode data={state.readData} />}
-        {state.mode === AppMode.SCANNING && <ScanningMode data={state.scanData} />}
-        {state.mode === AppMode.DANGER && <DangerMode hazard={state.navData?.hazard || "Unknown Hazard"} />}
+        {state.mode === AppMode.IDLE && <MemoIdle audioStream={videoStream} />}
+        {state.mode === AppMode.NAVIGATION && <MemoNavigation data={state.navData} />}
+        {state.mode === AppMode.READING && <MemoReading data={state.readData} />}
+        {state.mode === AppMode.SCANNING && <MemoScanning data={state.scanData} />}
+        {state.mode === AppMode.DANGER && <MemoDanger hazard={state.navData?.hazard || "Unknown Hazard"} />}
         {state.mode === AppMode.GUARDIAN && (
-            <GuardianMode 
+            <MemoGuardian 
                 data={state.guardianData} 
                 videoStream={videoStream} 
                 onExit={onExitGuardian} 

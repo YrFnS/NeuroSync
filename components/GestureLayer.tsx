@@ -22,9 +22,9 @@ export const GestureLayer: React.FC<Props> = ({
   const [touchStart, setTouchStart] = useState<number>(0);
   const [touchEndY, setTouchEndY] = useState<number>(0);
   const [touchStartY, setTouchStartY] = useState<number>(0);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<number | null>(null);
   const longPressTriggered = useRef<boolean>(false);
-  const doubleTapTimer = useRef<NodeJS.Timeout | null>(null);
+  const doubleTapTimer = useRef<number | null>(null);
   const lastTapTime = useRef<number>(0);
   const touchCount = useRef<number>(0);
 
@@ -36,7 +36,7 @@ export const GestureLayer: React.FC<Props> = ({
     touchCount.current = e.touches.length;
 
     // Start Long Press Timer (1.2s)
-    timerRef.current = setTimeout(() => {
+    timerRef.current = window.setTimeout(() => {
       onLongPress();
       longPressTriggered.current = true;
       if (navigator.vibrate) navigator.vibrate([50, 50, 50]); // Feedback
@@ -77,7 +77,7 @@ export const GestureLayer: React.FC<Props> = ({
       } else {
         // Potential Single Tap
         lastTapTime.current = now;
-        doubleTapTimer.current = setTimeout(() => {
+        doubleTapTimer.current = window.setTimeout(() => {
             onSingleTap(); // Fire single tap if no second tap comes
             lastTapTime.current = 0;
         }, 350);

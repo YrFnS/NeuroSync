@@ -104,9 +104,19 @@ export const useNeuroState = () => {
     const stateRef = useRef(state);
     useEffect(() => { stateRef.current = state; }, [state]);
 
-    // Persist memory
+    // Persist memory with debounce
     useEffect(() => {
-        localStorage.setItem('neurosync_memory', JSON.stringify(state.guardianData.eventLog));
+        const timeout = setTimeout(() => {
+            try {
+                // Limit storage to last 100 events to prevent JSON parsing lag
+                const limitedLog = state.guardianData.eventLog.slice(0, 100);
+                localStorage.setItem('neurosync_memory', JSON.stringify(limitedLog));
+            } catch (e) {
+                console.error("Failed to save memory", e);
+            }
+        }, 2000);
+
+        return () => clearTimeout(timeout);
     }, [state.guardianData.eventLog]);
 
     return { state, dispatch, stateRef };

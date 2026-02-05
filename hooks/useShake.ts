@@ -5,7 +5,7 @@ export const useShake = (threshold = 15, onShake: () => void) => {
   const lastY = useRef(0);
   const lastZ = useRef(0);
   const lastUpdate = useRef(0);
-  const shakeTimeout = useRef<NodeJS.Timeout | null>(null);
+  const shakeTimeout = useRef<number | null>(null);
 
   useEffect(() => {
     const handleMotion = (e: DeviceMotionEvent) => {
@@ -26,7 +26,7 @@ export const useShake = (threshold = 15, onShake: () => void) => {
              // Debounce shake
              if (!shakeTimeout.current) {
                 onShake();
-                shakeTimeout.current = setTimeout(() => {
+                shakeTimeout.current = window.setTimeout(() => {
                     shakeTimeout.current = null;
                 }, 1000);
              }

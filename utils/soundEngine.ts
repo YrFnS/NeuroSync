@@ -10,7 +10,7 @@ class SoundEngine {
     private droneOsc: OscillatorNode | null = null;
     private droneGain: GainNode | null = null;
     private synth: SpeechSynthesis = window.speechSynthesis;
-    private duckTimer: NodeJS.Timeout | null = null;
+    private duckTimer: number | null = null;
   
     constructor() {
       // Defer initialization
@@ -66,7 +66,7 @@ class SoundEngine {
         if (!this.sfxGain || !this.ctx) return;
         if (this.duckTimer) clearTimeout(this.duckTimer);
         this.sfxGain.gain.setTargetAtTime(0.05, this.ctx.currentTime, 0.1);
-        this.duckTimer = setTimeout(() => this.unduck(), 2000);
+        this.duckTimer = window.setTimeout(() => this.unduck(), 2000);
     }
 
     public unduck() {
