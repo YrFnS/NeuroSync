@@ -1,8 +1,10 @@
 import React, { useReducer, useState, useCallback, useEffect, useRef } from 'react';
 import { AppMode, NeuroState, ActionType, EnvironmentalEvent } from './types';
 import { LiquidDisplay } from './components/LiquidDisplay';
+import { BatteryWarning } from './components/BatteryWarning';
 import { useLiveSession } from './hooks/useLiveSession';
 import { useGeolocation } from './hooks/useGeolocation';
+import { useBattery } from './hooks/useBattery';
 import { soundEngine } from './utils/soundEngine';
 import { Power, Activity, ShieldAlert, Settings, AlertOctagon } from 'lucide-react';
 
@@ -100,6 +102,7 @@ const App: React.FC = () => {
   const [apiKey, setApiKey] = useState(process.env.API_KEY || '');
   const [showDebug, setShowDebug] = useState(false);
   const { location } = useGeolocation();
+  const { level: batteryLevel, charging: isCharging, supported: batterySupported } = useBattery();
   
   // App Mount Announcement
   useEffect(() => {
@@ -122,6 +125,15 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('neurosync_memory', JSON.stringify(state.guardianData.eventLog));
   }, [state.guardianData.eventLog]);
+
+  // Battery Warning Logic
+  const isLowBattery = batterySupported && !isCharging && batteryLevel <= 0.20;
+  useEffect(() => {
+    if (isLowBattery) {
+        soundEngine.playBatteryLow();
+        soundEngine.speakSystem("Warning. Battery critically low.");
+    }
+  }, [isLowBattery]);
 
   // Sound & Haptics Engine Control
   useEffect(() => {
@@ -282,6 +294,9 @@ const App: React.FC = () => {
             </div>
          </div>
       )}
+      
+      {/* Battery Warning Overlay */}
+      {isLowBattery && <BatteryWarning level={batteryLevel} />}
 
       {/* Main Content */}
       <main className="flex-1 relative z-0 h-full w-full bg-black" role="main" aria-live="polite">

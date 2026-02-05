@@ -114,6 +114,30 @@ class SoundEngine {
       osc.start();
       osc.stop(this.ctx.currentTime + 0.4);
     }
+
+    public playBatteryLow() {
+      this.init();
+      if (!this.ctx || !this.masterGain) return;
+      this.setPan(0);
+  
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      
+      osc.connect(gain);
+      if (this.panner) gain.connect(this.panner);
+      else gain.connect(this.masterGain);
+  
+      osc.type = 'sawtooth';
+      // Descending "power down" slide
+      osc.frequency.setValueAtTime(300, this.ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(50, this.ctx.currentTime + 0.6);
+  
+      gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.6);
+  
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.6);
+    }
   
     public playSuccess() {
       this.init();
