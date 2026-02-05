@@ -37,7 +37,12 @@ function reducer(state: NeuroState, action: ActionType): NeuroState {
       return { 
         ...state, 
         mode: AppMode.DANGER, 
-        navData: { ...state.navData!, hazard: action.payload },
+        // Safely handle navData even if transitioning from IDLE
+        navData: { 
+            direction: state.navData?.direction || 'STOP', 
+            distance: state.navData?.distance || '0m',
+            hazard: action.payload 
+        },
         guardianData: {
             ...state.guardianData,
             eventLog: [
