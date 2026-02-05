@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
 import { MODEL_NAME, SYSTEM_INSTRUCTION, TOOLS } from '../constants';
 import { AppMode } from '../types';
+import { soundEngine } from '../utils/soundEngine';
 
 // Helper for audio blob creation
 function createBlob(data: Float32Array): Blob {
@@ -49,15 +50,16 @@ interface UseLiveSessionProps {
   onTranscript: (text: string) => void;
   apiKey?: string;
   mode: AppMode;
+  location?: { lat: number; lng: number } | null;
 }
 
-export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode }: UseLiveSessionProps) => {
+export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode, location }: UseLiveSessionProps) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
   
-  // Refs for cleanup and stability
+  // Refs
   const sessionRef = useRef<Promise<any> | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -65,8 +67,13 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode }: UseLi
   const nextStartTimeRef = useRef<number>(0);
   const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
   const videoIntervalRef = useRef<number | null>(null);
+  const locationRef = useRef(location);
 
-  // Capture current frame as base64 JPEG
+  // Keep location ref updated for the connection event
+  useEffect(() => {
+    locationRef.current = location;
+  }, [location]);
+
   const getSnapshot = useCallback((): string | undefined => {
       if (!canvasRef.current || !videoRef.current) return undefined;
       const ctx = canvasRef.current.getContext('2d');
@@ -78,33 +85,27 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode }: UseLi
   }, []);
 
   // ADAPTIVE VISION LOOP
-  // Reacts to `mode` changes to adjust frame rate
   useEffect(() => {
     if (!isConnected || !isStreaming || !sessionRef.current || !videoRef.current || !canvasRef.current) return;
 
-    // Clear existing loop
     if (videoIntervalRef.current) clearInterval(videoIntervalRef.current);
 
-    // Determine FPS based on Mode
-    let intervalMs = 2000; // Default IDLE (0.5 FPS)
-    
+    let intervalMs = 2000;
     switch (mode) {
         case AppMode.DANGER:
         case AppMode.NAVIGATION:
-            intervalMs = 200; // 5 FPS (High Alert)
+            intervalMs = 200;
             break;
         case AppMode.READING:
         case AppMode.SCANNING:
-            intervalMs = 500; // 2 FPS (High Detail)
+            intervalMs = 500;
             break;
         case AppMode.GUARDIAN:
         case AppMode.IDLE:
         default:
-            intervalMs = 2000; // 0.5 FPS (Battery Saver)
+            intervalMs = 2000;
             break;
     }
-
-    // console.log(`[Vision] Adaptive Rate: ${intervalMs}ms for ${mode}`);
 
     const ctx = canvasRef.current.getContext('2d');
     const videoEl = videoRef.current;
@@ -112,21 +113,13 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode }: UseLi
 
     videoIntervalRef.current = window.setInterval(async () => {
         if (!ctx || !videoEl) return;
-        
-        // Draw frame
         ctx.drawImage(videoEl, 0, 0, canvasRef.current!.width, canvasRef.current!.height);
-        
-        // Compress (Lower quality for speed in Nav, higher in Read?)
-        // Keeping 0.5 for balance, latency is king.
         const base64 = canvasRef.current!.toDataURL('image/jpeg', 0.5).split(',')[1];
         
         try {
             const session = await sessionPromise;
             session.sendRealtimeInput({
-                media: {
-                    mimeType: 'image/jpeg',
-                    data: base64
-                }
+                media: { mimeType: 'image/jpeg', data: base64 }
             });
         } catch (err) {
             console.error("Frame send error:", err);
@@ -139,7 +132,6 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode }: UseLi
     };
   }, [mode, isConnected, isStreaming]);
 
-  // Connect to Gemini
   const connect = useCallback(async () => {
     setError(null);
     const key = apiKey || process.env.API_KEY;
@@ -155,23 +147,12 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode }: UseLi
 
       const ai = new GoogleGenAI({ apiKey: key });
       
-      // Start Camera & Mic
       const mediaStream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          channelCount: 1,
-          sampleRate: 16000,
-          echoCancellation: true,
-          noiseSuppression: true,
-        }, 
-        video: { 
-          width: 640, 
-          height: 480, 
-          frameRate: 30
-        } 
+        audio: { channelCount: 1, sampleRate: 16000, echoCancellation: true, noiseSuppression: true }, 
+        video: { width: 640, height: 480, frameRate: 30 } 
       });
       setVideoStream(mediaStream);
 
-      // Connect session
       const sessionPromise = ai.live.connect({
         model: MODEL_NAME,
         config: {
@@ -188,7 +169,7 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode }: UseLi
             setIsConnected(true);
             setIsStreaming(true);
 
-            // Audio Input Handling
+            // Audio Input Setup
             const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
             const source = inputCtx.createMediaStreamSource(mediaStream);
             const processor = inputCtx.createScriptProcessor(4096, 1, 1);
@@ -204,10 +185,7 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode }: UseLi
                     if (res && res.includes(',')) {
                         const base64data = res.split(',')[1];
                         session.sendRealtimeInput({
-                            media: {
-                                mimeType: 'audio/pcm;rate=16000',
-                                data: base64data
-                            }
+                            media: { mimeType: 'audio/pcm;rate=16000', data: base64data }
                         });
                     }
                   };
@@ -216,11 +194,38 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode }: UseLi
             };
             source.connect(processor);
             processor.connect(inputCtx.destination);
+
+            // *** CONTEXT INJECTION ***
+            // Immediately inform the model of time and location
+            sessionPromise.then(session => {
+                const now = new Date();
+                const timeString = now.toLocaleTimeString();
+                const dateString = now.toLocaleDateString();
+                let locString = "Unknown";
+                if (locationRef.current) {
+                    locString = `${locationRef.current.lat.toFixed(5)}, ${locationRef.current.lng.toFixed(5)}`;
+                }
+                
+                // We send this as a text input to prime the context
+                session.send({
+                    clientContent: {
+                        turns: [{
+                            role: "user",
+                            parts: [{ text: `SYSTEM_UPDATE: Context initialized. Local Time: ${timeString}, ${dateString}. GPS Coordinates: ${locString}. Visibility conditions may vary based on time of day.` }]
+                        }],
+                        turnComplete: true
+                    }
+                });
+            });
           },
           onmessage: async (msg: LiveServerMessage) => {
             // Handle Audio Output
             const audioData = msg.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (audioData && audioContextRef.current) {
+                // *** AUDIO DUCKING ***
+                // Lower UI volume when AI speaks
+                soundEngine.duck();
+
                 const ctx = audioContextRef.current;
                 const buffer = await decodeAudioData(decode(audioData), ctx, 24000, 1);
                 
@@ -234,13 +239,20 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode }: UseLi
                 nextStartTimeRef.current = start + buffer.duration;
                 
                 sourcesRef.current.add(source);
-                source.onended = () => sourcesRef.current.delete(source);
+                source.onended = () => {
+                    sourcesRef.current.delete(source);
+                    // Unduck if no more audio playing
+                    if (sourcesRef.current.size === 0) {
+                        setTimeout(() => soundEngine.unduck(), 200);
+                    }
+                };
             }
 
             if (msg.serverContent?.interrupted) {
                 sourcesRef.current.forEach(s => s.stop());
                 sourcesRef.current.clear();
                 nextStartTimeRef.current = 0;
+                soundEngine.unduck(); // Unduck immediately on interrupt
             }
 
             if (msg.toolCall) {
@@ -262,18 +274,19 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode }: UseLi
              console.log("Gemini Closed");
              setIsConnected(false);
              setIsStreaming(false);
+             soundEngine.unduck();
           },
           onerror: (err) => {
             console.error("Gemini Error", err);
             setIsConnected(false);
             setError("Connection Error");
+            soundEngine.unduck();
           }
         }
       });
       
       sessionRef.current = sessionPromise;
 
-      // Setup Video Refs (Streaming handled by useEffect)
       const videoEl = document.createElement('video');
       videoEl.srcObject = mediaStream;
       videoEl.muted = true;

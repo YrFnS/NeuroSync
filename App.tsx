@@ -5,6 +5,7 @@ import { BatteryWarning } from './components/BatteryWarning';
 import { useLiveSession } from './hooks/useLiveSession';
 import { useGeolocation } from './hooks/useGeolocation';
 import { useBattery } from './hooks/useBattery';
+import { useShake } from './hooks/useShake';
 import { soundEngine } from './utils/soundEngine';
 import { GestureLayer } from './components/GestureLayer';
 import { Power, Activity, ShieldAlert, Settings, AlertOctagon, Sun, Moon, EyeOff } from 'lucide-react';
@@ -35,12 +36,10 @@ function reducer(state: NeuroState, action: ActionType): NeuroState {
     case 'UPDATE_SCAN':
       return { ...state, mode: AppMode.SCANNING, scanData: action.payload };
     case 'TRIGGER_DANGER':
-      // Haptic Pattern: SOS (Short Short Short, Long Long Long, Short Short Short)
       if (navigator.vibrate) navigator.vibrate([100, 50, 100, 50, 100, 200, 500, 200, 500, 200, 500, 200, 100, 50, 100, 50, 100]);
       return { 
         ...state, 
         mode: AppMode.DANGER, 
-        // Safely handle navData even if transitioning from IDLE
         navData: { 
             direction: state.navData?.direction || 'STOP', 
             distance: state.navData?.distance || '0m',
@@ -103,14 +102,21 @@ const App: React.FC = () => {
   const [apiKey, setApiKey] = useState(process.env.API_KEY || '');
   const [showDebug, setShowDebug] = useState(false);
   const [privacyMode, setPrivacyMode] = useState(false);
-  
-  // Default to Dark Mode (false) as it is better for photophobia and camera usage
   const [isLightTheme, setIsLightTheme] = useState(false);
   
   const { location } = useGeolocation();
   const { level: batteryLevel, charging: isCharging, supported: batterySupported } = useBattery();
   
-  // Update System Chrome Color
+  // *** SHAKE TO RESET ***
+  useShake(15, () => {
+    if (state.mode !== AppMode.IDLE && state.mode !== AppMode.GUARDIAN) {
+       soundEngine.playReset();
+       soundEngine.speakSystem("Resetting interface.");
+       if (navigator.vibrate) navigator.vibrate(200);
+       dispatch({ type: 'SET_MODE', payload: AppMode.IDLE });
+    }
+  });
+
   useEffect(() => {
     const metaThemeColor = document.querySelector('meta[name="theme-color"]');
     if (metaThemeColor) {
@@ -118,9 +124,7 @@ const App: React.FC = () => {
     }
   }, [isLightTheme]);
 
-  // App Mount Announcement
   useEffect(() => {
-     // Small delay to ensure browser interaction policies are met or waiting for user first interaction
      const timer = setTimeout(() => {
          soundEngine.speakSystem("NeuroSync Online. Double tap screen to connect. Swipe down with two fingers for privacy curtain.");
      }, 1000);
@@ -140,7 +144,6 @@ const App: React.FC = () => {
     localStorage.setItem('neurosync_memory', JSON.stringify(state.guardianData.eventLog));
   }, [state.guardianData.eventLog]);
 
-  // Battery Warning Logic
   const isLowBattery = batterySupported && !isCharging && batteryLevel <= 0.20;
   useEffect(() => {
     if (isLowBattery) {
@@ -149,7 +152,6 @@ const App: React.FC = () => {
     }
   }, [isLowBattery]);
 
-  // Sound & Haptics Engine Control
   useEffect(() => {
     soundEngine.stopSonar();
     
@@ -157,22 +159,20 @@ const App: React.FC = () => {
        const distStr = state.navData?.distance || "";
        const direction = state.navData?.direction;
        
-       // Calculate intensity for sonar speed
        let intensity = 0.2;
        if (distStr.includes("1m") || distStr.includes("2m")) intensity = 0.9;
        
-       // SPATIAL AUDIO MAPPING
        if (direction === 'LEFT') {
-         soundEngine.setPan(-0.8); // Pan Left
-         if (navigator.vibrate) navigator.vibrate([100, 50, 100]); // Haptic: Double tap
+         soundEngine.setPan(-0.8);
+         if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
        } else if (direction === 'RIGHT') {
-         soundEngine.setPan(0.8); // Pan Right
-         if (navigator.vibrate) navigator.vibrate([100, 50, 100]); // Haptic: Double tap
+         soundEngine.setPan(0.8); 
+         if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
        } else if (direction === 'STOP') {
          soundEngine.setPan(0);
-         if (navigator.vibrate) navigator.vibrate([500]); // Haptic: Long buzz
+         if (navigator.vibrate) navigator.vibrate([500]);
        } else {
-         soundEngine.setPan(0); // Straight/Center
+         soundEngine.setPan(0);
        }
 
        soundEngine.startSonar(intensity);
@@ -224,10 +224,9 @@ const App: React.FC = () => {
       return { success: true };
     }
     else if (name === 'logEnvironmentalEvent') {
-      // CAPTURE SNAPSHOT OF THE MEMORY
       const snapshot = getSnapshotRef.current();
       dispatch({ type: 'LOG_EVENT', payload: { type: args.type, description: args.description, snapshot } });
-      soundEngine.playSuccess(); // Audio confirmation
+      soundEngine.playSuccess();
       return { success: true, message: "Event logged to memory with visual evidence." };
     } 
     else if (name === 'queryMemory') {
@@ -244,18 +243,17 @@ const App: React.FC = () => {
   const { connect, disconnect, isConnected, videoStream, error, getSnapshot } = useLiveSession({
     onToolCall: handleToolCall,
     onTranscript: handleTranscript,
-    apiKey, // Pass the apiKey explicitly
-    mode: state.mode // Pass mode for adaptive frame rate
+    apiKey,
+    mode: state.mode,
+    location // *** PASS LOCATION FOR CONTEXT INJECTION ***
   });
 
-  // CRITICAL ACCESSIBILITY: Speak system errors
   useEffect(() => {
     if (error) {
         soundEngine.speakSystem(`System Error: ${error}`);
     }
   }, [error]);
 
-  // Keep ref updated
   useEffect(() => {
       getSnapshotRef.current = getSnapshot;
   }, [getSnapshot]);
@@ -295,10 +293,6 @@ const App: React.FC = () => {
   return (
     <div className={`h-[100dvh] w-screen overflow-hidden flex flex-col font-sans relative transition-colors duration-300 ${isLightTheme ? 'theme-light bg-neuro-bg text-neuro-text' : 'bg-black text-white'}`}>
       
-      {/* 
-        GESTURE LAYER: The "Invisible UI" 
-        This sits on top of everything to handle blind-friendly inputs
-      */}
       <GestureLayer 
         onDoubleTap={toggleConnection}
         onLongPress={handleGuardianTrigger}
@@ -308,7 +302,6 @@ const App: React.FC = () => {
         setPrivacyMode={setPrivacyMode}
       />
 
-      {/* Header - Safe Area Top - HIDDEN IN GUARDIAN MODE */}
       {state.mode !== AppMode.GUARDIAN && !privacyMode && (
         <div className="absolute top-0 left-0 w-full p-2 pt-safe z-[40] flex justify-between pointer-events-none items-start">
            <div 
@@ -323,7 +316,6 @@ const App: React.FC = () => {
            </div>
            
            <div className="flex items-center gap-2 mt-2 mr-2">
-               {/* Help Button (Visual Fallback) */}
                <button 
                 onClick={() => dispatch({ type: 'ACTIVATE_GUARDIAN' })}
                 className="pointer-events-auto bg-[#FF4D00] text-white border-4 border-white px-3 py-2 rounded-xl font-black text-sm md:text-base animate-pulse hover:bg-red-600 active:scale-95 shadow-xl flex items-center gap-2 transition-transform"
@@ -335,7 +327,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Permission Error Banner */}
       {error && (
          <div className="absolute top-32 left-4 right-4 z-[60] bg-[#FF4D00] text-white p-4 rounded-xl border-4 border-white flex items-center gap-4 animate-bounce" role="alert">
             <AlertOctagon size={48} strokeWidth={3} />
@@ -346,10 +337,8 @@ const App: React.FC = () => {
          </div>
       )}
       
-      {/* Battery Warning Overlay */}
       {isLowBattery && <BatteryWarning level={batteryLevel} />}
 
-      {/* Main Content */}
       <main className="flex-1 relative z-0 h-full w-full bg-neuro-bg" role="main" aria-live="polite">
          <LiquidDisplay 
             state={state} 
@@ -358,7 +347,6 @@ const App: React.FC = () => {
          />
       </main>
 
-      {/* Visual Bottom Controls - Only show if disconnected or not in privacy */}
       {state.mode !== AppMode.GUARDIAN && !isConnected && !privacyMode && (
         <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-[40] flex flex-col items-center justify-center w-full pointer-events-none opacity-50">
              <div className="animate-bounce mb-2 text-center">
@@ -368,14 +356,12 @@ const App: React.FC = () => {
         </div>
       )}
       
-      {/* Active Connection Indicator (Bottom Center) */}
       {isConnected && !privacyMode && state.mode !== AppMode.GUARDIAN && (
           <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-[40] pointer-events-none">
              <div className="w-16 h-1 bg-[#FFD600] rounded-full shadow-[0_0_10px_#FFD600] animate-pulse"></div>
           </div>
       )}
 
-      {/* Debug Trigger */}
       <div className="fixed top-32 right-4 z-[60]">
           <button 
             onClick={() => setShowDebug(!showDebug)} 

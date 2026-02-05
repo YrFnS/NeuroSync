@@ -49,7 +49,20 @@ export const GuardianMode: React.FC<Props> = ({ data, videoStream, onExit }) => 
     iconAnchor: [5, 5]
   });
 
-  const copyLink = () => {
+  const shareOrCopy = async () => {
+    if (navigator.share) {
+        try {
+            await navigator.share({
+                title: 'NeuroSync Emergency',
+                text: 'I need assistance. Here is my live status.',
+                url: link
+            });
+            return;
+        } catch (e) {
+            // Fallback to copy if share fails or cancelled
+        }
+    }
+    
     navigator.clipboard.writeText(link);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -239,7 +252,7 @@ export const GuardianMode: React.FC<Props> = ({ data, videoStream, onExit }) => 
 
              {/* Share Link Footer */}
             <button 
-                onClick={copyLink}
+                onClick={shareOrCopy}
                 className="w-full bg-slate-900 border border-slate-800 p-3 rounded group hover:bg-slate-800 transition-colors flex items-center justify-between shrink-0"
             >
                 <div className="flex items-center gap-3 overflow-hidden">
