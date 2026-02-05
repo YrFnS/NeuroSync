@@ -42,7 +42,7 @@ export const useGeminiIntegration = (
       else if (name === 'triggerDanger') {
         dispatch({ type: 'TRIGGER_DANGER', payload: args.hazardDescription });
         
-        // Auto-log danger to memory
+        // PERFORMANCE: Auto-log danger to memory (Async), but DON'T clog React state with Base64
         try {
           const snapshot = getSnapshotRef.current();
           const baseLat = stateRef.current.guardianData.location?.lat || 0;
@@ -71,11 +71,11 @@ export const useGeminiIntegration = (
       else if (name === 'logEnvironmentalEvent') {
         const snapshot = getSnapshotRef.current();
         
-        // 1. Dispatch to UI state for immediate feedback
-        dispatch({ type: 'LOG_EVENT', payload: { type: args.type, description: args.description, snapshot } });
+        // 1. Dispatch to UI state for immediate feedback (WITHOUT snapshot to save memory)
+        dispatch({ type: 'LOG_EVENT', payload: { type: args.type, description: args.description } });
         soundEngine.playSuccess();
         
-        // 2. Persist to Memory Palace (IndexedDB)
+        // 2. Persist to Memory Palace with full evidence
         try {
             const baseLat = stateRef.current.guardianData.location?.lat || 0;
             const baseLng = stateRef.current.guardianData.location?.lng || 0;
@@ -90,7 +90,7 @@ export const useGeminiIntegration = (
             });
         } catch(e) { console.error("Persistence failed", e); }
   
-        return { success: true, message: "Event logged to memory with visual evidence." };
+        return { success: true, message: "Event logged to memory." };
       } 
       else if (name === 'queryMemory') {
         const query = args.query.toLowerCase();
@@ -110,7 +110,6 @@ export const useGeminiIntegration = (
         videoStream: cameraStream
     });
 
-    // Keep the snapshot ref in sync with the session's getSnapshot function
     useEffect(() => {
         getSnapshotRef.current = session.getSnapshot;
     }, [session.getSnapshot]);

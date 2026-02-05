@@ -5,7 +5,34 @@ import { MODEL_NAME, SYSTEM_INSTRUCTION, TOOLS } from '../constants';
 import { AppMode } from '../types';
 import { soundEngine } from '../utils/soundEngine';
 
-// High-performance direct buffer conversion
+// AudioWorklet Processor Code (Embedded to avoid extra file complexity)
+const WORKLET_CODE = `
+class RecorderProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.bufferSize = 4096;
+    this.buffer = new Float32Array(this.bufferSize);
+    this.index = 0;
+  }
+  process(inputs, outputs, parameters) {
+    const input = inputs[0];
+    if (input.length > 0) {
+      const channel = input[0];
+      for (let i = 0; i < channel.length; i++) {
+        this.buffer[this.index++] = channel[i];
+        if (this.index >= this.bufferSize) {
+          this.port.postMessage(this.buffer);
+          this.index = 0;
+        }
+      }
+    }
+    return true;
+  }
+}
+registerProcessor('recorder-processor', RecorderProcessor);
+`;
+
+// Optimized buffer conversion
 function floatTo16BitPCMBase64(float32: Float32Array): string {
   const len = float32.length;
   const int16 = new Int16Array(len);
@@ -15,11 +42,14 @@ function floatTo16BitPCMBase64(float32: Float32Array): string {
     int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
   }
   
+  // Use a more memory-efficient string building approach
   let binary = '';
   const bytes = new Uint8Array(int16.buffer);
   const l = bytes.byteLength;
-  for (let i = 0; i < l; i += 32768) { 
-      binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + 32768, l)) as unknown as number[]);
+  // Process in chunks to avoid stack overflow on large arrays
+  const CHUNK_SIZE = 0x8000; 
+  for (let i = 0; i < l; i += CHUNK_SIZE) { 
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + CHUNK_SIZE, l)) as unknown as number[]);
   }
   return btoa(binary);
 }
@@ -75,7 +105,8 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode, locatio
   const audioContextRef = useRef<AudioContext | null>(null);
   const nextStartTimeRef = useRef<number>(0);
   const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
-  const videoIntervalRef = useRef<number | null>(null);
+  const requestRef = useRef<number | null>(null);
+  const lastVideoFrameTime = useRef<number>(0);
   const locationRef = useRef(location);
 
   useEffect(() => {
@@ -89,46 +120,70 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode, locatio
       const ctx = canvasRef.current.getContext('2d', { willReadFrequently: true });
       if (ctx) {
           ctx.drawImage(videoRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height);
-          return canvasRef.current.toDataURL('image/jpeg', 0.6);
+          return canvasRef.current.toDataURL('image/jpeg', 0.5);
       }
       return undefined;
   }, []);
 
   // ADAPTIVE VISION LOOP
   useEffect(() => {
-    if (!isConnected || !isStreaming || !sessionRef.current || !videoRef.current || !canvasRef.current) return;
-
-    if (videoIntervalRef.current) clearInterval(videoIntervalRef.current);
-
-    let intervalMs = 2000; 
-    switch (mode) {
-        case AppMode.DANGER:
-        case AppMode.NAVIGATION: intervalMs = 200; break;
-        case AppMode.READING:
-        case AppMode.SCANNING: intervalMs = 500; break;
-        default: intervalMs = 2000; break;
+    if (!isConnected || !isStreaming || !sessionRef.current || !videoRef.current || !canvasRef.current) {
+        if (requestRef.current) cancelAnimationFrame(requestRef.current);
+        return;
     }
 
-    const ctx = canvasRef.current.getContext('2d', { willReadFrequently: true });
-    const videoEl = videoRef.current;
-    const sessionPromise = sessionRef.current;
-    const canvas = canvasRef.current;
+    const processFrame = async () => {
+        // Stop loop if disconnected
+        if (!isConnected || !isStreaming) return;
 
-    videoIntervalRef.current = window.setInterval(async () => {
-        if (!ctx || !videoEl) return;
-        if (videoEl.readyState >= 2) {
-            ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-            // Lower quality to 0.4 for faster transmission
-            const base64 = canvas.toDataURL('image/jpeg', 0.4).split(',')[1];
-            try {
-                const session = await sessionPromise;
-                session.sendRealtimeInput({ media: { mimeType: 'image/jpeg', data: base64 } });
-            } catch (err) { console.error("Frame send error:", err); }
+        // Smart Throttling: Check visibility and mode
+        const isHidden = document.hidden;
+        const now = Date.now();
+        
+        let intervalMs = 1000; 
+        if (isHidden) {
+            intervalMs = 5000; // Very slow background processing
+        } else {
+            switch (mode) {
+                case AppMode.DANGER:
+                case AppMode.NAVIGATION: intervalMs = 250; break; // 4 FPS
+                case AppMode.READING:
+                case AppMode.SCANNING: intervalMs = 500; break; // 2 FPS
+                default: intervalMs = 1500; break; // ~0.7 FPS for Idle
+            }
         }
-    }, intervalMs);
+
+        if (now - lastVideoFrameTime.current >= intervalMs) {
+            lastVideoFrameTime.current = now;
+            
+            const videoEl = videoRef.current;
+            const canvas = canvasRef.current;
+            
+            if (videoEl && canvas && videoEl.readyState >= 2) {
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                if (ctx) {
+                    ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+                    // Use lower quality (0.35) for speed. It's sufficient for AI.
+                    const base64 = canvas.toDataURL('image/jpeg', 0.35).split(',')[1];
+                    try {
+                        const session = await sessionRef.current;
+                        if(session) {
+                            session.sendRealtimeInput({ media: { mimeType: 'image/jpeg', data: base64 } });
+                        }
+                    } catch (err) { 
+                        console.warn("Frame drop:", err); 
+                    }
+                }
+            }
+        }
+        
+        requestRef.current = requestAnimationFrame(processFrame);
+    };
+
+    requestRef.current = requestAnimationFrame(processFrame);
 
     return () => {
-        if (videoIntervalRef.current) clearInterval(videoIntervalRef.current);
+        if (requestRef.current) cancelAnimationFrame(requestRef.current);
     };
   }, [mode, isConnected, isStreaming]);
 
@@ -140,7 +195,7 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode, locatio
     if (!videoStream) { setError("Camera not ready"); return; }
 
     try {
-      // Reuse existing context if available to prevent memory leaks
+      // Reuse existing context if available
       let audioContext = audioContextRef.current;
       if (!audioContext || audioContext.state === 'closed') {
          audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
@@ -170,27 +225,37 @@ Context: ${now.toLocaleTimeString()}, Location: ${locString}`;
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } }
         },
         callbacks: {
-          onopen: () => {
+          onopen: async () => {
             console.log("Gemini Connected");
             setIsConnected(true);
             setIsStreaming(true);
 
-            // Audio Input Handling using existing stream
-            const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
-            const source = inputCtx.createMediaStreamSource(videoStream);
-            const processor = inputCtx.createScriptProcessor(4096, 1, 1);
-            
-            processor.onaudioprocess = (e) => {
-               const inputData = e.inputBuffer.getChannelData(0);
-               const base64Data = floatTo16BitPCMBase64(inputData);
-               sessionPromise.then(session => {
-                  session.sendRealtimeInput({
-                      media: { mimeType: 'audio/pcm;rate=16000', data: base64Data }
-                  });
-               });
-            };
-            source.connect(processor);
-            processor.connect(inputCtx.destination);
+            // Audio Input: Switch to AudioWorklet for performance
+            try {
+                const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+                const blob = new Blob([WORKLET_CODE], { type: "application/javascript" });
+                const blobUrl = URL.createObjectURL(blob);
+                
+                await inputCtx.audioWorklet.addModule(blobUrl);
+                
+                const source = inputCtx.createMediaStreamSource(videoStream);
+                const worklet = new AudioWorkletNode(inputCtx, 'recorder-processor');
+                
+                worklet.port.onmessage = (e) => {
+                    const inputData = e.data; // Float32Array from Worklet
+                    const base64Data = floatTo16BitPCMBase64(inputData);
+                    sessionPromise.then(session => {
+                        session.sendRealtimeInput({
+                            media: { mimeType: 'audio/pcm;rate=16000', data: base64Data }
+                        });
+                    });
+                };
+                
+                source.connect(worklet);
+                worklet.connect(inputCtx.destination);
+            } catch (err) {
+                console.error("AudioWorklet failed, falling back implies silence for now.", err);
+            }
           },
           onmessage: async (msg: LiveServerMessage) => {
             if (msg.serverContent?.inputTranscription?.text) onTranscript(msg.serverContent.inputTranscription.text, true);
@@ -268,9 +333,9 @@ Context: ${now.toLocaleTimeString()}, Location: ${locString}`;
   }, [onToolCall, apiKey, videoStream]);
 
   const disconnect = useCallback(() => {
-    if (videoIntervalRef.current) {
-        clearInterval(videoIntervalRef.current);
-        videoIntervalRef.current = null;
+    if (requestRef.current) {
+        cancelAnimationFrame(requestRef.current);
+        requestRef.current = null;
     }
     
     if (audioContextRef.current) {
