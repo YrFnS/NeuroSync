@@ -13,17 +13,20 @@ export const useAudioFeedback = (state: NeuroState) => {
            let intensity = 0.2;
            if (distStr.includes("1m") || distStr.includes("2m")) intensity = 0.9;
            
+           // Spatial Audio Mapping
+           // 0 = Straight, -90 = Left, 90 = Right
            if (direction === 'LEFT') {
-             soundEngine.setPan(-0.8);
+             soundEngine.setAzimuth(-90, 2); // Source is 2m to the left
              if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
            } else if (direction === 'RIGHT') {
-             soundEngine.setPan(0.8); 
+             soundEngine.setAzimuth(90, 2); // Source is 2m to the right
              if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
            } else if (direction === 'STOP') {
-             soundEngine.setPan(0);
+             soundEngine.setAzimuth(0, 0.5); // Source is inside head/very close
              if (navigator.vibrate) navigator.vibrate([500]);
            } else {
-             soundEngine.setPan(0);
+             // STRAIGHT or CROSSWALK
+             soundEngine.setAzimuth(0, 3); // Source is 3m ahead
            }
     
            soundEngine.startSonar(intensity);

@@ -1,3 +1,4 @@
+
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
 import { MODEL_NAME, SYSTEM_INSTRUCTION, TOOLS } from '../constants';
@@ -5,7 +6,6 @@ import { AppMode } from '../types';
 import { soundEngine } from '../utils/soundEngine';
 
 // High-performance direct buffer conversion
-// Eliminates Blob and FileReader GC pressure
 function floatTo16BitPCMBase64(float32: Float32Array): string {
   const len = float32.length;
   const int16 = new Int16Array(len);
@@ -15,15 +15,12 @@ function floatTo16BitPCMBase64(float32: Float32Array): string {
     int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
   }
   
-  // Efficiently convert buffer to binary string
   let binary = '';
   const bytes = new Uint8Array(int16.buffer);
   const l = bytes.byteLength;
-  // Process in chunks to prevent stack overflow on large buffers
   for (let i = 0; i < l; i += 32768) { 
       binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + 32768, l)) as unknown as number[]);
   }
-  
   return btoa(binary);
 }
 
@@ -47,7 +44,6 @@ async function decodeAudioData(
     return buffer;
 }
 
-// Helper: base64 decoder
 function decode(base64: string) {
     const binaryString = atob(base64);
     const len = binaryString.length;
@@ -64,13 +60,13 @@ interface UseLiveSessionProps {
   apiKey?: string;
   mode: AppMode;
   location?: { lat: number; lng: number } | null;
+  videoStream: MediaStream | null; // Now accepts external stream
 }
 
-export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode, location }: UseLiveSessionProps) => {
+export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode, location, videoStream }: UseLiveSessionProps) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
   
   // Refs
   const sessionRef = useRef<Promise<any> | null>(null);
@@ -82,7 +78,6 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode, locatio
   const videoIntervalRef = useRef<number | null>(null);
   const locationRef = useRef(location);
 
-  // Keep location ref updated for the connection event
   useEffect(() => {
     locationRef.current = location;
   }, [location]);
@@ -101,26 +96,15 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode, locatio
   useEffect(() => {
     if (!isConnected || !isStreaming || !sessionRef.current || !videoRef.current || !canvasRef.current) return;
 
-    // Clear any existing loop to prevent duplicates
     if (videoIntervalRef.current) clearInterval(videoIntervalRef.current);
 
-    // Determine FPS based on Mode
-    let intervalMs = 2000; // Default IDLE (0.5 FPS)
-    
+    let intervalMs = 2000; 
     switch (mode) {
         case AppMode.DANGER:
-        case AppMode.NAVIGATION:
-            intervalMs = 200; // 5 FPS (High Alert)
-            break;
+        case AppMode.NAVIGATION: intervalMs = 200; break;
         case AppMode.READING:
-        case AppMode.SCANNING:
-            intervalMs = 500; // 2 FPS (High Detail)
-            break;
-        case AppMode.GUARDIAN:
-        case AppMode.IDLE:
-        default:
-            intervalMs = 2000; // 0.5 FPS (Battery Saver)
-            break;
+        case AppMode.SCANNING: intervalMs = 500; break;
+        default: intervalMs = 2000; break;
     }
 
     const ctx = canvasRef.current.getContext('2d', { willReadFrequently: true });
@@ -130,27 +114,14 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode, locatio
 
     videoIntervalRef.current = window.setInterval(async () => {
         if (!ctx || !videoEl) return;
-        
-        // Only draw if we have a frame
         if (videoEl.readyState >= 2) {
             ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-            
-            // JPEG compression 0.4 is sufficient for AI analysis and faster than 0.5
             const base64 = canvas.toDataURL('image/jpeg', 0.4).split(',')[1];
-            
             try {
                 const session = await sessionPromise;
-                session.sendRealtimeInput({
-                    media: {
-                        mimeType: 'image/jpeg',
-                        data: base64
-                    }
-                });
-            } catch (err) {
-                console.error("Frame send error:", err);
-            }
+                session.sendRealtimeInput({ media: { mimeType: 'image/jpeg', data: base64 } });
+            } catch (err) { console.error("Frame send error:", err); }
         }
-
     }, intervalMs);
 
     return () => {
@@ -162,10 +133,8 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode, locatio
   const connect = useCallback(async () => {
     setError(null);
     const key = apiKey || process.env.API_KEY;
-    if (!key) {
-      setError("API Key Missing");
-      return;
-    }
+    if (!key) { setError("API Key Missing"); return; }
+    if (!videoStream) { setError("Camera not ready"); return; }
 
     try {
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
@@ -174,22 +143,6 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode, locatio
 
       const ai = new GoogleGenAI({ apiKey: key });
       
-      const mediaStream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          channelCount: 1,
-          sampleRate: 16000,
-          echoCancellation: true,
-          noiseSuppression: true,
-        }, 
-        video: { 
-          width: 640, 
-          height: 480, 
-          frameRate: 30
-        } 
-      });
-      setVideoStream(mediaStream);
-
-      // PREPARE CONTEXT BEFORE CONNECTING
       const now = new Date();
       let locString = "Unknown";
       if (locationRef.current) {
@@ -204,13 +157,10 @@ Context: ${now.toLocaleTimeString()}, Location: ${locString}`;
         config: {
           systemInstruction: dynamicSystemInstruction,
           responseModalities: [Modality.AUDIO],
-          // ENABLE TRANSCRIPTION FOR GUARDIAN LOGGING
           inputAudioTranscription: { model: "gemini-2.5-flash" },
           outputAudioTranscription: { model: "gemini-2.5-flash" },
           tools: [{ functionDeclarations: TOOLS }],
-          speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } }
-          }
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } } }
         },
         callbacks: {
           onopen: () => {
@@ -218,23 +168,17 @@ Context: ${now.toLocaleTimeString()}, Location: ${locString}`;
             setIsConnected(true);
             setIsStreaming(true);
 
-            // Audio Input Handling
+            // Audio Input Handling using existing stream
             const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
-            const source = inputCtx.createMediaStreamSource(mediaStream);
+            const source = inputCtx.createMediaStreamSource(videoStream);
             const processor = inputCtx.createScriptProcessor(4096, 1, 1);
             
             processor.onaudioprocess = (e) => {
                const inputData = e.inputBuffer.getChannelData(0);
-               
-               // OPTIMIZED: Direct buffer conversion
                const base64Data = floatTo16BitPCMBase64(inputData);
-
                sessionPromise.then(session => {
                   session.sendRealtimeInput({
-                      media: {
-                          mimeType: 'audio/pcm;rate=16000',
-                          data: base64Data
-                      }
+                      media: { mimeType: 'audio/pcm;rate=16000', data: base64Data }
                   });
                });
             };
@@ -242,40 +186,24 @@ Context: ${now.toLocaleTimeString()}, Location: ${locString}`;
             processor.connect(inputCtx.destination);
           },
           onmessage: async (msg: LiveServerMessage) => {
-            // Handle Transcripts
-            if (msg.serverContent?.inputTranscription?.text) {
-                onTranscript(msg.serverContent.inputTranscription.text, true);
-            }
-            if (msg.serverContent?.outputTranscription?.text) {
-                onTranscript(msg.serverContent.outputTranscription.text, false);
-            }
+            if (msg.serverContent?.inputTranscription?.text) onTranscript(msg.serverContent.inputTranscription.text, true);
+            if (msg.serverContent?.outputTranscription?.text) onTranscript(msg.serverContent.outputTranscription.text, false);
 
-            // Handle Audio Output
             const audioData = msg.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (audioData && audioContextRef.current) {
-                // *** AUDIO DUCKING ***
                 soundEngine.duck();
-
                 const ctx = audioContextRef.current;
                 const buffer = await decodeAudioData(decode(audioData), ctx, 24000, 1);
-                
                 const source = ctx.createBufferSource();
                 source.buffer = buffer;
                 source.connect(ctx.destination);
-                
-                const now = ctx.currentTime;
-                // Proper streaming scheduler
-                const start = Math.max(now, nextStartTimeRef.current);
+                const start = Math.max(ctx.currentTime, nextStartTimeRef.current);
                 source.start(start);
                 nextStartTimeRef.current = start + buffer.duration;
-                
                 sourcesRef.current.add(source);
                 source.onended = () => {
                     sourcesRef.current.delete(source);
-                    // Unduck if no more audio playing
-                    if (sourcesRef.current.size === 0) {
-                        setTimeout(() => soundEngine.unduck(), 200);
-                    }
+                    if (sourcesRef.current.size === 0) setTimeout(() => soundEngine.unduck(), 200);
                 };
             }
 
@@ -283,7 +211,7 @@ Context: ${now.toLocaleTimeString()}, Location: ${locString}`;
                 sourcesRef.current.forEach(s => s.stop());
                 sourcesRef.current.clear();
                 nextStartTimeRef.current = 0;
-                soundEngine.unduck(); // Unduck immediately on interrupt
+                soundEngine.unduck();
             }
 
             if (msg.toolCall) {
@@ -291,11 +219,7 @@ Context: ${now.toLocaleTimeString()}, Location: ${locString}`;
                     const result = await onToolCall(fc.name, fc.args);
                     sessionPromise.then(session => {
                         session.sendToolResponse({
-                            functionResponses: {
-                                id: fc.id,
-                                name: fc.name,
-                                response: { result: result } 
-                            }
+                            functionResponses: { id: fc.id, name: fc.name, response: { result: result } }
                         })
                     })
                 }
@@ -318,8 +242,9 @@ Context: ${now.toLocaleTimeString()}, Location: ${locString}`;
       
       sessionRef.current = sessionPromise;
 
+      // Attach existing stream to internal video element for processing
       const videoEl = document.createElement('video');
-      videoEl.srcObject = mediaStream;
+      videoEl.srcObject = videoStream;
       videoEl.muted = true;
       videoEl.play();
       videoRef.current = videoEl;
@@ -331,9 +256,9 @@ Context: ${now.toLocaleTimeString()}, Location: ${locString}`;
 
     } catch (e: any) {
       console.error("Connection failed", e);
-      setError(e.message || "Permissions Denied");
+      setError(e.message || "Connection Error");
     }
-  }, [onToolCall, apiKey]);
+  }, [onToolCall, apiKey, videoStream]);
 
   const disconnect = useCallback(() => {
     if (videoIntervalRef.current) {
@@ -341,18 +266,17 @@ Context: ${now.toLocaleTimeString()}, Location: ${locString}`;
         videoIntervalRef.current = null;
     }
     
-    if (videoStream) {
-        videoStream.getTracks().forEach(track => track.stop());
-        setVideoStream(null);
-    }
-
+    // We DO NOT stop the videoStream tracks here because useCamera owns them now.
+    
     if (audioContextRef.current) {
         audioContextRef.current.close();
         audioContextRef.current = null;
     }
+    
+    // Reset state but don't reload page
+    setIsConnected(false);
+    setIsStreaming(false);
+  }, []);
 
-    window.location.reload(); 
-  }, [videoStream]);
-
-  return { connect, disconnect, isConnected, isStreaming, videoStream, error, getSnapshot };
+  return { connect, disconnect, isConnected, isStreaming, error, getSnapshot };
 };

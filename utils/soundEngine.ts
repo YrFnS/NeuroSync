@@ -1,11 +1,11 @@
 // A pure Web Audio API synthesizer for sci-fi interface sounds
-// Now with 3D Spatial Audio, Native TTS, and Audio Analysis
+// Now with 3D Spatial Audio (HRTF), Native TTS, and Audio Analysis
 
 class SoundEngine {
     private ctx: AudioContext | null = null;
     private masterGain: GainNode | null = null;
     private sfxGain: GainNode | null = null;
-    private panner: StereoPannerNode | null = null;
+    private panner: PannerNode | null = null; // Upgraded to 3D Panner
     private sonarInterval: number | null = null;
     private droneOsc: OscillatorNode | null = null;
     private droneGain: GainNode | null = null;
@@ -28,15 +28,27 @@ class SoundEngine {
         this.sfxGain = this.ctx.createGain();
         this.sfxGain.gain.value = 0.3;
         
-        if (this.ctx.createStereoPanner) {
-            this.panner = this.ctx.createStereoPanner();
-            this.panner.pan.value = 0;
-            this.panner.connect(this.sfxGain);
-        } else {
-             // Fallback
-        }
+        // 3D Spatial Audio Setup
+        this.panner = this.ctx.createPanner();
+        this.panner.panningModel = 'HRTF'; // High-quality binaural rendering
+        this.panner.distanceModel = 'inverse';
+        this.panner.refDistance = 1;
+        this.panner.maxDistance = 10000;
+        this.panner.rolloffFactor = 1;
         
+        // Connect Panner to SFX Gain
+        this.panner.connect(this.sfxGain);
         this.sfxGain.connect(this.masterGain);
+
+        // Ensure listener is facing forward (standard Cartesian)
+        if (this.ctx.listener.forwardX) {
+            this.ctx.listener.forwardX.value = 0;
+            this.ctx.listener.forwardY.value = 0;
+            this.ctx.listener.forwardZ.value = -1;
+            this.ctx.listener.upX.value = 0;
+            this.ctx.listener.upY.value = 1;
+            this.ctx.listener.upZ.value = 0;
+        }
       }
       if (this.ctx?.state === 'suspended') {
         this.ctx.resume();
@@ -57,7 +69,6 @@ class SoundEngine {
         const analyser = this.ctx.createAnalyser();
         analyser.fftSize = 256;
         source.connect(analyser);
-        // Do not connect to destination to avoid feedback loop
         return analyser;
     }
 
@@ -91,11 +102,26 @@ class SoundEngine {
         this.synth.speak(utterance);
     }
 
-    public setPan(panValue: number) {
+    /**
+     * Positions the sound source relative to the user.
+     * @param azimuthDeg Angle in degrees. 0=Front, -90=Left, 90=Right, 180=Behind.
+     * @param distance Meters from user.
+     */
+    public setAzimuth(azimuthDeg: number, distance: number = 2) {
         this.init();
-        if (this.panner) {
-            this.panner.pan.setTargetAtTime(panValue, this.ctx!.currentTime, 0.1);
-        }
+        if (!this.panner || !this.ctx) return;
+        
+        // Convert Degrees to Radians
+        // Web Audio Coord System: +X Right, +Y Up, -Z Forward
+        const rad = (azimuthDeg * Math.PI) / 180;
+        const x = Math.sin(rad) * distance;
+        const z = -Math.cos(rad) * distance;
+        
+        const t = this.ctx.currentTime;
+        // Smooth transition to new position
+        this.panner.positionX.setTargetAtTime(x, t, 0.1);
+        this.panner.positionZ.setTargetAtTime(z, t, 0.1);
+        this.panner.positionY.setTargetAtTime(0, t, 0.1); // Eye level
     }
 
     // Ambient Drone for "System Alive" feel
@@ -120,12 +146,20 @@ class SoundEngine {
     public playCompassTick() {
         this.init();
         if (!this.ctx || !this.sfxGain) return;
-        this.setPan(0);
+        this.setAzimuth(0, 1); // Center tick
 
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.connect(gain);
-        gain.connect(this.sfxGain);
+        gain.connect(this.sfxGain); // Route through panner via sfxGain connection logic? 
+        // Note: Earlier structure connected panner to sfxGain. 
+        // We need to connect the osc -> gain -> panner.
+        // Let's fix the routing for momentary SFX.
+        
+        // Re-routing for dynamic panner usage
+        gain.disconnect();
+        if (this.panner) gain.connect(this.panner); 
+        else gain.connect(this.sfxGain);
 
         osc.type = 'square';
         osc.frequency.setValueAtTime(800, this.ctx.currentTime);
@@ -141,7 +175,7 @@ class SoundEngine {
     public playModeSwitch() {
       this.init();
       if (!this.ctx || !this.sfxGain) return;
-      this.setPan(0);
+      this.setAzimuth(0, 1);
   
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
@@ -170,6 +204,7 @@ class SoundEngine {
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.connect(gain);
+        // Reset sound bypasses panner, goes to master
         gain.connect(this.masterGain);
 
         osc.type = 'sawtooth';
@@ -186,7 +221,7 @@ class SoundEngine {
     public playDangerAlarm() {
       this.init();
       if (!this.ctx || !this.masterGain) return; 
-      this.setPan(0); 
+      this.setAzimuth(0, 0.5); // Close and Center
   
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
@@ -209,7 +244,7 @@ class SoundEngine {
     public playBatteryLow() {
       this.init();
       if (!this.ctx || !this.masterGain) return;
-      this.setPan(0);
+      this.setAzimuth(0, 1);
   
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
@@ -232,7 +267,7 @@ class SoundEngine {
     public playSuccess() {
       this.init();
       if (!this.ctx || !this.sfxGain) return;
-      this.setPan(0);
+      this.setAzimuth(0, 1);
   
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();

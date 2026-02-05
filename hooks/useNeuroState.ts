@@ -1,18 +1,10 @@
 import { useReducer, useEffect, useRef } from 'react';
 import { NeuroState, ActionType, EnvironmentalEvent, AppMode } from '../types';
-
-const loadMemory = (): EnvironmentalEvent[] => {
-  try {
-    const stored = localStorage.getItem('neurosync_memory');
-    return stored ? JSON.parse(stored) : [];
-  } catch (e) {
-    return [];
-  }
-};
+import { memoryStore } from '../utils/memoryStore';
 
 const initialState: NeuroState = {
   mode: AppMode.IDLE,
-  guardianData: { active: false, transcript: [], eventLog: loadMemory(), locationHistory: [] },
+  guardianData: { active: false, transcript: [], eventLog: [], locationHistory: [] },
   isAudioStreaming: false,
 };
 
@@ -66,6 +58,8 @@ function reducer(state: NeuroState, action: ActionType): NeuroState {
           ...action.payload,
           coordinates: baseLat !== 0 ? { lat: baseLat + jitter(), lng: baseLng + jitter() } : undefined
       };
+      // Note: We don't write to DB here to avoid blocking reducer. 
+      // The DB write happens in the tool handler in App.tsx
       return {
           ...state,
           guardianData: {
@@ -73,6 +67,14 @@ function reducer(state: NeuroState, action: ActionType): NeuroState {
               eventLog: [newEvent, ...state.guardianData.eventLog]
           }
       };
+    case 'LOAD_HISTORY':
+      return {
+          ...state,
+          guardianData: {
+              ...state.guardianData,
+              eventLog: [...action.payload]
+          }
+      }
     case 'UPDATE_LOCATION':
       // Append new location to history if it has moved significantly (approx 5 meters)
       const lastLoc = state.guardianData.locationHistory[state.guardianData.locationHistory.length - 1];
@@ -104,20 +106,16 @@ export const useNeuroState = () => {
     const stateRef = useRef(state);
     useEffect(() => { stateRef.current = state; }, [state]);
 
-    // Persist memory with debounce
+    // Hydrate Memory Palace on Mount
     useEffect(() => {
-        const timeout = setTimeout(() => {
-            try {
-                // Limit storage to last 100 events to prevent JSON parsing lag
-                const limitedLog = state.guardianData.eventLog.slice(0, 100);
-                localStorage.setItem('neurosync_memory', JSON.stringify(limitedLog));
-            } catch (e) {
-                console.error("Failed to save memory", e);
-            }
-        }, 2000);
-
-        return () => clearTimeout(timeout);
-    }, [state.guardianData.eventLog]);
+        memoryStore.getRecentEvents(50)
+            .then(events => {
+                if (events && events.length > 0) {
+                    dispatch({ type: 'LOAD_HISTORY', payload: events });
+                }
+            })
+            .catch(err => console.error("Memory Palace hydration failed", err));
+    }, []);
 
     return { state, dispatch, stateRef };
 };

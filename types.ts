@@ -1,4 +1,6 @@
+
 export enum AppMode {
+  OFFLINE = 'OFFLINE', // New fallback mode
   IDLE = 'IDLE',
   NAVIGATION = 'NAVIGATION',
   READING = 'READING',
@@ -48,6 +50,12 @@ export interface GuardianData {
   plan?: EmergencyPlan;
 }
 
+export interface DetectedObject {
+    class: string;
+    score: number;
+    bbox: number[]; // [x, y, width, height]
+}
+
 export interface NeuroState {
   mode: AppMode;
   navData?: NavigationData;
@@ -55,6 +63,7 @@ export interface NeuroState {
   scanData?: ScanningData;
   guardianData: GuardianData;
   isAudioStreaming: boolean;
+  offlineDetections?: DetectedObject[]; // New field for local detections
 }
 
 export type ActionType = 
@@ -67,5 +76,7 @@ export type ActionType =
   | { type: 'UPDATE_PLAN'; payload: EmergencyPlan }
   | { type: 'ADD_TRANSCRIPT'; payload: string }
   | { type: 'LOG_EVENT'; payload: Omit<EnvironmentalEvent, 'id' | 'timestamp'> }
+  | { type: 'LOAD_HISTORY'; payload: EnvironmentalEvent[] }
   | { type: 'UPDATE_LOCATION'; payload: { lat: number; lng: number } }
-  | { type: 'SET_STREAMING'; payload: boolean };
+  | { type: 'SET_STREAMING'; payload: boolean }
+  | { type: 'UPDATE_OFFLINE_DETECTIONS'; payload: DetectedObject[] };

@@ -6,6 +6,7 @@ import { ScanningMode } from './modes/ScanningMode';
 import { DangerMode } from './modes/DangerMode';
 import { GuardianMode } from './modes/GuardianMode';
 import { IdleMode } from './modes/IdleMode';
+import { OfflineMode } from './modes/OfflineMode';
 import { Bookmark } from 'lucide-react';
 
 interface Props {
@@ -21,6 +22,7 @@ const MemoReading = memo(ReadingMode);
 const MemoScanning = memo(ScanningMode);
 const MemoDanger = memo(DangerMode);
 const MemoGuardian = memo(GuardianMode);
+const MemoOffline = memo(OfflineMode);
 
 export const LiquidDisplay: React.FC<Props> = ({ state, videoStream, onExitGuardian }) => {
   const [showMemoryToast, setShowMemoryToast] = useState<string | null>(null);
@@ -38,15 +40,17 @@ export const LiquidDisplay: React.FC<Props> = ({ state, videoStream, onExitGuard
   }, [state.guardianData.eventLog, state.mode]);
 
   const isGuardian = state.mode === AppMode.GUARDIAN;
+  const isOffline = state.mode === AppMode.OFFLINE;
 
   // Safe area padding for modes that coexist with global UI (Header/Footer)
-  const containerClass = isGuardian ? "w-full h-full" : "w-full h-full pt-28 pb-40 px-4";
+  const containerClass = (isGuardian || isOffline) ? "w-full h-full" : "w-full h-full pt-28 pb-40 px-4";
 
   return (
     <div className="w-full h-full relative overflow-hidden bg-neuro-bg liquid-transition">
       
       {/* Modes Content */}
       <div className={`relative z-10 ${containerClass} flex flex-col`}>
+        {state.mode === AppMode.OFFLINE && <MemoOffline stream={videoStream} detections={state.offlineDetections || []} />}
         {state.mode === AppMode.IDLE && <MemoIdle audioStream={videoStream} />}
         {state.mode === AppMode.NAVIGATION && <MemoNavigation data={state.navData} />}
         {state.mode === AppMode.READING && <MemoReading data={state.readData} />}
