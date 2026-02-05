@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ShieldAlert, Radio, Share2, Check, Copy, Video, X, Terminal, Footprints, AlertTriangle } from 'lucide-react';
+import { ShieldAlert, Radio, Share2, Check, Copy, X, Terminal, Footprints, AlertTriangle } from 'lucide-react';
 import { NeuroState } from '../../types';
 import L from 'leaflet';
 
@@ -35,6 +35,20 @@ export const GuardianMode: React.FC<Props> = ({ data, videoStream, onExit }) => 
     iconAnchor: [7, 7]
   });
 
+  const hazardIcon = L.divIcon({
+    className: 'custom-div-icon',
+    html: `<div style="background-color: #FF4D00; width: 12px; height: 12px; transform: rotate(45deg); box-shadow: 0 0 10px #FF4D00; border: 1px solid white;"></div>`,
+    iconSize: [12, 12],
+    iconAnchor: [6, 6]
+  });
+
+  const memoryIcon = L.divIcon({
+    className: 'custom-div-icon',
+    html: `<div style="background-color: #0047AB; width: 10px; height: 10px; border-radius: 50%; box-shadow: 0 0 10px #0047AB; border: 1px solid white;"></div>`,
+    iconSize: [10, 10],
+    iconAnchor: [5, 5]
+  });
+
   const copyLink = () => {
     navigator.clipboard.writeText(link);
     setCopied(true);
@@ -63,13 +77,47 @@ export const GuardianMode: React.FC<Props> = ({ data, videoStream, onExit }) => 
     if (!map) return;
     markersRef.current.clearLayers();
 
+    // 1. Add User Marker
     if (data.location) {
-        L.marker([data.location.lat, data.location.lng], { icon: userIcon })
+        L.marker([data.location.lat, data.location.lng], { icon: userIcon, zIndexOffset: 1000 })
          .bindPopup("TARGET: USER")
          .addTo(markersRef.current);
         map.panTo([data.location.lat, data.location.lng], { animate: true });
     }
-  }, [data.location]);
+
+    // 2. Add Event Log Markers (Hazards & Memories)
+    data.eventLog.forEach(event => {
+        if (event.coordinates) {
+            const isHazard = event.type === 'HAZARD_DETECTED';
+            const icon = isHazard ? hazardIcon : memoryIcon;
+            
+            // Build rich popup content
+            const popupContent = document.createElement('div');
+            popupContent.innerHTML = `
+                <div style="min-width: 200px; font-family: system-ui;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+                         <span style="color: ${isHazard ? '#FF4D00' : '#0047AB'}; font-weight: 900; font-size: 10px; letter-spacing: 1px; text-transform: uppercase;">
+                            ${isHazard ? '⚠️ HAZARD' : '📍 MEMORY'}
+                         </span>
+                         <span style="color: #666; font-size: 10px;">
+                            ${new Date(event.timestamp).toLocaleTimeString()}
+                         </span>
+                    </div>
+                    <p style="color: white; font-size: 13px; font-weight: 700; line-height: 1.2; margin-bottom: 8px;">${event.description}</p>
+                    ${event.snapshot ? `<div style="width: 100%; aspect-ratio: 16/9; background: #222; border-radius: 4px; border: 1px solid #444; overflow: hidden; display: flex; align-items: center; justify-content: center;"><img src="${event.snapshot}" style="width: 100%; height: 100%; object-fit: cover;" /></div>` : ''}
+                </div>
+            `;
+
+            L.marker([event.coordinates.lat, event.coordinates.lng], { icon })
+             .bindPopup(popupContent, { 
+                closeButton: false,
+                className: 'custom-popup-wrapper' 
+             })
+             .addTo(markersRef.current);
+        }
+    });
+
+  }, [data.location, data.eventLog]);
 
   return (
     <div className="flex flex-col h-full w-full bg-[#050505] p-2 md:p-4 animate-in slide-in-from-right duration-500 overflow-y-auto pb-safe font-mono">
@@ -183,7 +231,7 @@ export const GuardianMode: React.FC<Props> = ({ data, videoStream, onExit }) => 
                    {data.eventLog.map((event) => (
                       <div key={event.id} className="text-blue-400/80 break-words border-l border-blue-900/30 pl-2">
                         <span className="text-slate-600 mr-2">[{new Date(event.timestamp).toLocaleTimeString()}]</span>
-                        EVENT: {event.description}
+                        <span className={event.type === 'HAZARD_DETECTED' ? 'text-red-500 font-bold' : ''}>{event.type}:</span> {event.description}
                       </div>
                    ))}
                 </div>
