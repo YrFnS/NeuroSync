@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState, useRef } from 'react';
 import { AlertTriangle, Disc, Hand, Compass } from 'lucide-react';
 import { NeuroState } from '../../types';
@@ -107,6 +108,22 @@ export const NavigationMode: React.FC<{ data: NeuroState['navData'] }> = ({ data
   const distanceNum = data.distance.replace(/[^0-9.]/g, '');
   const distanceUnit = data.distance.replace(/[0-9.]/g, '');
 
+  // Dynamic Scale Logic
+  let meters = parseFloat(distanceNum) || 0;
+  if (distanceUnit.trim().toLowerCase().includes('ft')) {
+      meters = meters * 0.3048;
+  }
+
+  // Calculate Urgency (0.0 to 1.0)
+  // Close (< 3m) = 1.0
+  // Far (> 15m) = 0.0
+  const MIN_DIST = 3;
+  const MAX_DIST = 15;
+  const urgency = 1 - Math.min(Math.max((meters - MIN_DIST) / (MAX_DIST - MIN_DIST), 0), 1);
+  
+  // Size range: 20vh (far) to 55vh (near)
+  const arrowSizeVh = 20 + (35 * urgency);
+
   return (
     <div className={`flex flex-col h-full w-full ${bgColor} ${textColor} transition-colors duration-300 relative overflow-hidden rounded-3xl border-4 border-white shadow-2xl`}>
       
@@ -142,13 +159,20 @@ export const NavigationMode: React.FC<{ data: NeuroState['navData'] }> = ({ data
             </div>
           </div>
 
-          <div className="flex-1 flex items-center justify-center w-full relative">
+          <div className="flex-1 flex items-center justify-center w-full relative transition-all duration-500">
              {isStop ? (
                 <Hand size={200} strokeWidth={3} className="w-[40vh] h-[40vh] animate-pulse" />
              ) : isCrosswalk ? (
                 <Disc size={200} strokeWidth={3} className="w-[40vh] h-[40vh] animate-spin-slow" />
              ) : (
-                <svg viewBox="0 0 100 100" className={`w-[50vh] h-[50vh] fill-current ${isLeft ? '-rotate-90' : isRight ? 'rotate-90' : ''} transition-transform duration-500 ease-out filter drop-shadow-lg`}>
+                <svg 
+                    viewBox="0 0 100 100" 
+                    style={{
+                        width: `${arrowSizeVh}vh`,
+                        height: `${arrowSizeVh}vh`
+                    }}
+                    className={`fill-current ${isLeft ? '-rotate-90' : isRight ? 'rotate-90' : ''} transition-all duration-500 ease-out filter drop-shadow-lg`}
+                >
                     <path d="M50 5 L90 50 L65 50 L65 95 L35 95 L35 50 L10 50 Z" />
                 </svg>
              )}
