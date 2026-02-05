@@ -1,8 +1,42 @@
-import React from 'react';
-import { AlertTriangle, Disc, Hand } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { AlertTriangle, Disc, Hand, Compass } from 'lucide-react';
 import { NeuroState } from '../../types';
+import { soundEngine } from '../../utils/soundEngine';
 
 export const NavigationMode: React.FC<{ data: NeuroState['navData'] }> = ({ data }) => {
+  const [heading, setHeading] = useState(0);
+
+  // Compass Logic
+  useEffect(() => {
+    const handleOrientation = (e: DeviceOrientationEvent) => {
+        if (e.alpha !== null) {
+            const h = e.alpha; // 0 is North (on most devices/browsers)
+            setHeading(h);
+
+            // "North Notch" - Tactile feedback when facing North
+            // We use a small window (350-10 degrees)
+            if (h > 355 || h < 5) {
+                // Debounce could be added, but the sound engine's playCompassTick is short enough
+                // to create a nice "purr" if hovering on North.
+                // We add a random chance to reduce frequency if it's too aggressive
+                if (Math.random() > 0.8) {
+                    if (navigator.vibrate) navigator.vibrate(5); // Tiny tick
+                    soundEngine.playCompassTick();
+                }
+            }
+        }
+    };
+
+    // Check for support/permission (iOS requires explicit permission request typically, simplifying for PWA demo)
+    if (window.DeviceOrientationEvent) {
+        window.addEventListener('deviceorientation', handleOrientation);
+    }
+
+    return () => {
+        window.removeEventListener('deviceorientation', handleOrientation);
+    };
+  }, []);
+
   if (!data) return null;
 
   let bgColor = "bg-signal-green"; // Signal Green (Default Go)
@@ -38,10 +72,16 @@ export const NavigationMode: React.FC<{ data: NeuroState['navData'] }> = ({ data
     <div className={`flex flex-col h-full w-full ${bgColor} ${textColor} transition-colors duration-300 relative overflow-hidden rounded-3xl border-4 border-white shadow-2xl`}>
       
       {/* 
-        MASSIVE DIRECTIONAL INDICATOR 
+        COMPASS RING (Background)
+        Rotates based on device heading.
       */}
-      <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none">
-          {/* Subtle texture or pattern could go here */}
+      <div className="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none overflow-hidden">
+          <div 
+             className="w-[120vw] h-[120vw] border-[20px] border-dashed border-current rounded-full flex items-center justify-center transition-transform duration-200 ease-out"
+             style={{ transform: `rotate(${-heading}deg)` }}
+          >
+              <div className="absolute top-0 w-8 h-20 bg-current"></div> {/* North Marker */}
+          </div>
       </div>
 
       <div className="flex-1 flex flex-col relative z-10 py-4">
@@ -72,9 +112,15 @@ export const NavigationMode: React.FC<{ data: NeuroState['navData'] }> = ({ data
              )}
           </div>
 
-          {/* BOTTOM: Label */}
-          <div className="h-[15%] flex items-start justify-center">
+          {/* BOTTOM: Label & Compass Icon */}
+          <div className="h-[15%] flex flex-col items-center justify-start">
             <h1 className="text-[8vh] font-black uppercase tracking-wide text-center leading-none">{label}</h1>
+            
+            {/* Compass Small Indicator */}
+            <div className="flex items-center gap-2 mt-2 opacity-60">
+                <Compass size={24} className={heading > 350 || heading < 10 ? 'text-white fill-current' : ''} />
+                <span className="font-mono font-bold">{Math.round(heading)}°</span>
+            </div>
           </div>
       </div>
 

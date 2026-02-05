@@ -61,11 +61,32 @@ class SoundEngine {
             this.panner.pan.setTargetAtTime(panValue, this.ctx!.currentTime, 0.1);
         }
     }
+
+    public playCompassTick() {
+        this.init();
+        if (!this.ctx || !this.masterGain) return;
+        this.setPan(0);
+
+        // A very short, high mechanical click
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.05);
+
+        gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
+
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.05);
+    }
   
     public playModeSwitch() {
       this.init();
       if (!this.ctx || !this.masterGain) return;
-      // Reset pan to center for UI sounds
       this.setPan(0);
   
       const osc = this.ctx.createOscillator();

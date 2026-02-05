@@ -244,8 +244,16 @@ const App: React.FC = () => {
   const { connect, disconnect, isConnected, videoStream, error, getSnapshot } = useLiveSession({
     onToolCall: handleToolCall,
     onTranscript: handleTranscript,
-    apiKey // Pass the apiKey explicitly
+    apiKey, // Pass the apiKey explicitly
+    mode: state.mode // Pass mode for adaptive frame rate
   });
+
+  // CRITICAL ACCESSIBILITY: Speak system errors
+  useEffect(() => {
+    if (error) {
+        soundEngine.speakSystem(`System Error: ${error}`);
+    }
+  }, [error]);
 
   // Keep ref updated
   useEffect(() => {

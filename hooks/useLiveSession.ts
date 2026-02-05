@@ -1,6 +1,7 @@
-import { useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
 import { MODEL_NAME, SYSTEM_INSTRUCTION, TOOLS } from '../constants';
+import { AppMode } from '../types';
 
 // Helper for audio blob creation
 function createBlob(data: Float32Array): Blob {
@@ -47,9 +48,10 @@ interface UseLiveSessionProps {
   onToolCall: (name: string, args: any) => Promise<any>;
   onTranscript: (text: string) => void;
   apiKey?: string;
+  mode: AppMode;
 }
 
-export const useLiveSession = ({ onToolCall, onTranscript, apiKey }: UseLiveSessionProps) => {
+export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode }: UseLiveSessionProps) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +62,6 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey }: UseLiveSess
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const inputAudioContextRef = useRef<AudioContext | null>(null);
   const nextStartTimeRef = useRef<number>(0);
   const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
   const videoIntervalRef = useRef<number | null>(null);
@@ -75,6 +76,68 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey }: UseLiveSess
       }
       return undefined;
   }, []);
+
+  // ADAPTIVE VISION LOOP
+  // Reacts to `mode` changes to adjust frame rate
+  useEffect(() => {
+    if (!isConnected || !isStreaming || !sessionRef.current || !videoRef.current || !canvasRef.current) return;
+
+    // Clear existing loop
+    if (videoIntervalRef.current) clearInterval(videoIntervalRef.current);
+
+    // Determine FPS based on Mode
+    let intervalMs = 2000; // Default IDLE (0.5 FPS)
+    
+    switch (mode) {
+        case AppMode.DANGER:
+        case AppMode.NAVIGATION:
+            intervalMs = 200; // 5 FPS (High Alert)
+            break;
+        case AppMode.READING:
+        case AppMode.SCANNING:
+            intervalMs = 500; // 2 FPS (High Detail)
+            break;
+        case AppMode.GUARDIAN:
+        case AppMode.IDLE:
+        default:
+            intervalMs = 2000; // 0.5 FPS (Battery Saver)
+            break;
+    }
+
+    // console.log(`[Vision] Adaptive Rate: ${intervalMs}ms for ${mode}`);
+
+    const ctx = canvasRef.current.getContext('2d');
+    const videoEl = videoRef.current;
+    const sessionPromise = sessionRef.current;
+
+    videoIntervalRef.current = window.setInterval(async () => {
+        if (!ctx || !videoEl) return;
+        
+        // Draw frame
+        ctx.drawImage(videoEl, 0, 0, canvasRef.current!.width, canvasRef.current!.height);
+        
+        // Compress (Lower quality for speed in Nav, higher in Read?)
+        // Keeping 0.5 for balance, latency is king.
+        const base64 = canvasRef.current!.toDataURL('image/jpeg', 0.5).split(',')[1];
+        
+        try {
+            const session = await sessionPromise;
+            session.sendRealtimeInput({
+                media: {
+                    mimeType: 'image/jpeg',
+                    data: base64
+                }
+            });
+        } catch (err) {
+            console.error("Frame send error:", err);
+        }
+
+    }, intervalMs);
+
+    return () => {
+        if (videoIntervalRef.current) clearInterval(videoIntervalRef.current);
+    };
+  }, [mode, isConnected, isStreaming]);
 
   // Connect to Gemini
   const connect = useCallback(async () => {
@@ -97,6 +160,8 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey }: UseLiveSess
         audio: {
           channelCount: 1,
           sampleRate: 16000,
+          echoCancellation: true,
+          noiseSuppression: true,
         }, 
         video: { 
           width: 640, 
@@ -125,8 +190,6 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey }: UseLiveSess
 
             // Audio Input Handling
             const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
-            inputAudioContextRef.current = inputCtx;
-            
             const source = inputCtx.createMediaStreamSource(mediaStream);
             const processor = inputCtx.createScriptProcessor(4096, 1, 1);
             
@@ -134,12 +197,10 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey }: UseLiveSess
                const inputData = e.inputBuffer.getChannelData(0);
                const blob = createBlob(inputData);
                
-               // Send Audio via FileReader
                sessionPromise.then(session => {
                   const reader = new FileReader();
                   reader.onloadend = () => {
                     const res = reader.result as string;
-                    // Safety check for data URL format
                     if (res && res.includes(',')) {
                         const base64data = res.split(',')[1];
                         session.sendRealtimeInput({
@@ -168,7 +229,6 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey }: UseLiveSess
                 source.connect(ctx.destination);
                 
                 const now = ctx.currentTime;
-                // Schedule next chunk to ensure gapless playback
                 const start = Math.max(now, nextStartTimeRef.current);
                 source.start(start);
                 nextStartTimeRef.current = start + buffer.duration;
@@ -213,7 +273,7 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey }: UseLiveSess
       
       sessionRef.current = sessionPromise;
 
-      // Video Loop
+      // Setup Video Refs (Streaming handled by useEffect)
       const videoEl = document.createElement('video');
       videoEl.srcObject = mediaStream;
       videoEl.muted = true;
@@ -224,26 +284,6 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey }: UseLiveSess
       canvas.width = 640;
       canvas.height = 480;
       canvasRef.current = canvas;
-      const ctx = canvas.getContext('2d');
-
-      // Increased sampling rate for "Danger Sense" (200ms = 5fps)
-      if (videoIntervalRef.current) clearInterval(videoIntervalRef.current);
-      
-      videoIntervalRef.current = window.setInterval(async () => {
-        if (!ctx || !videoEl) return;
-        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-        
-        const base64 = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
-        
-        const session = await sessionPromise;
-        session.sendRealtimeInput({
-            media: {
-                mimeType: 'image/jpeg',
-                data: base64
-            }
-        });
-
-      }, 200);
 
     } catch (e: any) {
       console.error("Connection failed", e);
@@ -252,35 +292,22 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey }: UseLiveSess
   }, [onToolCall, apiKey]);
 
   const disconnect = useCallback(() => {
-    // Clean up intervals
     if (videoIntervalRef.current) {
         clearInterval(videoIntervalRef.current);
         videoIntervalRef.current = null;
     }
     
-    // Stop tracks
     if (videoStream) {
         videoStream.getTracks().forEach(track => track.stop());
         setVideoStream(null);
     }
 
-    // Close Audio Contexts
     if (audioContextRef.current) {
         audioContextRef.current.close();
         audioContextRef.current = null;
     }
-    if (inputAudioContextRef.current) {
-        inputAudioContextRef.current.close();
-        inputAudioContextRef.current = null;
-    }
 
-    // Reset state
-    setIsConnected(false);
-    setIsStreaming(false);
-    sessionRef.current = null;
-    
-    // Optional: hard reload if deep cleanup is needed
-    // window.location.reload(); 
+    window.location.reload(); 
   }, [videoStream]);
 
   return { connect, disconnect, isConnected, isStreaming, videoStream, error, getSnapshot };
