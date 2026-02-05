@@ -88,22 +88,25 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode, locatio
   useEffect(() => {
     if (!isConnected || !isStreaming || !sessionRef.current || !videoRef.current || !canvasRef.current) return;
 
+    // Clear any existing loop to prevent duplicates
     if (videoIntervalRef.current) clearInterval(videoIntervalRef.current);
 
-    let intervalMs = 2000;
+    // Determine FPS based on Mode
+    let intervalMs = 2000; // Default IDLE (0.5 FPS)
+    
     switch (mode) {
         case AppMode.DANGER:
         case AppMode.NAVIGATION:
-            intervalMs = 200;
+            intervalMs = 200; // 5 FPS (High Alert)
             break;
         case AppMode.READING:
         case AppMode.SCANNING:
-            intervalMs = 500;
+            intervalMs = 500; // 2 FPS (High Detail)
             break;
         case AppMode.GUARDIAN:
         case AppMode.IDLE:
         default:
-            intervalMs = 2000;
+            intervalMs = 2000; // 0.5 FPS (Battery Saver)
             break;
     }
 
@@ -113,13 +116,18 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode, locatio
 
     videoIntervalRef.current = window.setInterval(async () => {
         if (!ctx || !videoEl) return;
+        
         ctx.drawImage(videoEl, 0, 0, canvasRef.current!.width, canvasRef.current!.height);
+        
         const base64 = canvasRef.current!.toDataURL('image/jpeg', 0.5).split(',')[1];
         
         try {
             const session = await sessionPromise;
             session.sendRealtimeInput({
-                media: { mimeType: 'image/jpeg', data: base64 }
+                media: {
+                    mimeType: 'image/jpeg',
+                    data: base64
+                }
             });
         } catch (err) {
             console.error("Frame send error:", err);
@@ -132,6 +140,7 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode, locatio
     };
   }, [mode, isConnected, isStreaming]);
 
+  // Connect to Gemini
   const connect = useCallback(async () => {
     setError(null);
     const key = apiKey || process.env.API_KEY;
@@ -148,15 +157,40 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode, locatio
       const ai = new GoogleGenAI({ apiKey: key });
       
       const mediaStream = await navigator.mediaDevices.getUserMedia({ 
-        audio: { channelCount: 1, sampleRate: 16000, echoCancellation: true, noiseSuppression: true }, 
-        video: { width: 640, height: 480, frameRate: 30 } 
+        audio: {
+          channelCount: 1,
+          sampleRate: 16000,
+          echoCancellation: true,
+          noiseSuppression: true,
+        }, 
+        video: { 
+          width: 640, 
+          height: 480, 
+          frameRate: 30
+        } 
       });
       setVideoStream(mediaStream);
+
+      // PREPARE CONTEXT BEFORE CONNECTING
+      const now = new Date();
+      const timeString = now.toLocaleTimeString();
+      const dateString = now.toLocaleDateString();
+      let locString = "Unknown";
+      if (locationRef.current) {
+          locString = `${locationRef.current.lat.toFixed(5)}, ${locationRef.current.lng.toFixed(5)}`;
+      }
+      
+      const dynamicSystemInstruction = `${SYSTEM_INSTRUCTION}
+
+**CURRENT SYSTEM CONTEXT**
+Timestamp: ${dateString} ${timeString}
+User Location (GPS): ${locString}
+Visibility: Conditions may vary. Rely on audio cues if video is dark.`;
 
       const sessionPromise = ai.live.connect({
         model: MODEL_NAME,
         config: {
-          systemInstruction: SYSTEM_INSTRUCTION,
+          systemInstruction: dynamicSystemInstruction,
           responseModalities: [Modality.AUDIO],
           tools: [{ functionDeclarations: TOOLS }],
           speechConfig: {
@@ -169,7 +203,7 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode, locatio
             setIsConnected(true);
             setIsStreaming(true);
 
-            // Audio Input Setup
+            // Audio Input Handling
             const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
             const source = inputCtx.createMediaStreamSource(mediaStream);
             const processor = inputCtx.createScriptProcessor(4096, 1, 1);
@@ -185,7 +219,10 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode, locatio
                     if (res && res.includes(',')) {
                         const base64data = res.split(',')[1];
                         session.sendRealtimeInput({
-                            media: { mimeType: 'audio/pcm;rate=16000', data: base64data }
+                            media: {
+                                mimeType: 'audio/pcm;rate=16000',
+                                data: base64data
+                            }
                         });
                     }
                   };
@@ -194,29 +231,6 @@ export const useLiveSession = ({ onToolCall, onTranscript, apiKey, mode, locatio
             };
             source.connect(processor);
             processor.connect(inputCtx.destination);
-
-            // *** CONTEXT INJECTION ***
-            // Immediately inform the model of time and location
-            sessionPromise.then(session => {
-                const now = new Date();
-                const timeString = now.toLocaleTimeString();
-                const dateString = now.toLocaleDateString();
-                let locString = "Unknown";
-                if (locationRef.current) {
-                    locString = `${locationRef.current.lat.toFixed(5)}, ${locationRef.current.lng.toFixed(5)}`;
-                }
-                
-                // We send this as a text input to prime the context
-                session.send({
-                    clientContent: {
-                        turns: [{
-                            role: "user",
-                            parts: [{ text: `SYSTEM_UPDATE: Context initialized. Local Time: ${timeString}, ${dateString}. GPS Coordinates: ${locString}. Visibility conditions may vary based on time of day.` }]
-                        }],
-                        turnComplete: true
-                    }
-                });
-            });
           },
           onmessage: async (msg: LiveServerMessage) => {
             // Handle Audio Output
