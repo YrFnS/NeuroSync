@@ -39,7 +39,7 @@ export const DangerMode: React.FC<{ hazard: string }> = ({ hazard }) => {
     <div className="flex flex-col items-center justify-center h-full w-full flash-danger p-6 text-center relative overflow-hidden" role="alert" aria-live="assertive">
       
       {/* Background strobe overlay for extra visual intensity */}
-      <div className="absolute inset-0 bg-[#FF4D00] mix-blend-overlay opacity-20 animate-pulse pointer-events-none"></div>
+      <div className="absolute inset-0 bg-signal-red mix-blend-overlay opacity-20 animate-pulse pointer-events-none"></div>
 
       <div className="bg-white rounded-full p-4 mb-8 animate-[pulse_0.5s_cubic-bezier(0.4,0,0.6,1)_infinite] shadow-[0_0_50px_rgba(255,255,255,0.5)] z-10">
           <Hand size={120} className="text-black" strokeWidth={2.5} />
@@ -49,7 +49,7 @@ export const DangerMode: React.FC<{ hazard: string }> = ({ hazard }) => {
       
       <div className="bg-black px-8 py-6 rounded-2xl border-[6px] border-white w-full shadow-2xl relative overflow-hidden z-10">
           <div className="flex flex-col items-center gap-4 relative z-10">
-              <AlertTriangle size={64} className="text-[#FF4D00] animate-bounce" fill="white" strokeWidth={2} />
+              <AlertTriangle size={64} className="text-signal-red animate-bounce" fill="white" strokeWidth={2} />
               <p className="text-3xl md:text-4xl font-bold text-white uppercase leading-tight">{hazard}</p>
           </div>
       </div>

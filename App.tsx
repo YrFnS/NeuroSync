@@ -6,7 +6,8 @@ import { useLiveSession } from './hooks/useLiveSession';
 import { useGeolocation } from './hooks/useGeolocation';
 import { useBattery } from './hooks/useBattery';
 import { soundEngine } from './utils/soundEngine';
-import { Power, Activity, ShieldAlert, Settings, AlertOctagon, Sun, Moon } from 'lucide-react';
+import { GestureLayer } from './components/GestureLayer';
+import { Power, Activity, ShieldAlert, Settings, AlertOctagon, Sun, Moon, EyeOff } from 'lucide-react';
 
 const loadMemory = (): EnvironmentalEvent[] => {
   try {
@@ -101,6 +102,7 @@ const App: React.FC = () => {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [apiKey, setApiKey] = useState(process.env.API_KEY || '');
   const [showDebug, setShowDebug] = useState(false);
+  const [privacyMode, setPrivacyMode] = useState(false);
   
   // Default to Dark Mode (false) as it is better for photophobia and camera usage
   const [isLightTheme, setIsLightTheme] = useState(false);
@@ -120,7 +122,7 @@ const App: React.FC = () => {
   useEffect(() => {
      // Small delay to ensure browser interaction policies are met or waiting for user first interaction
      const timer = setTimeout(() => {
-         soundEngine.speakSystem("NeuroSync Systems Online. Double tap bottom center to activate.");
+         soundEngine.speakSystem("NeuroSync Online. Double tap screen to connect. Swipe down with two fingers for privacy curtain.");
      }, 1000);
      return () => clearTimeout(timer);
   }, []);
@@ -267,14 +269,42 @@ const App: React.FC = () => {
     }
   };
 
+  const handleSingleTap = () => {
+    if (isConnected) {
+        soundEngine.speakSystem(`System Active. Mode: ${state.mode}. Battery ${Math.round(batteryLevel * 100)} percent.`);
+    } else {
+        soundEngine.speakSystem("System Idle. Double tap to connect.");
+    }
+  };
+
+  const handleGuardianTrigger = () => {
+    if (state.mode !== AppMode.GUARDIAN) {
+        dispatch({ type: 'ACTIVATE_GUARDIAN' });
+        soundEngine.speakSystem("Emergency Guardian Mode Activated.");
+    }
+  };
+
   return (
     <div className={`h-[100dvh] w-screen overflow-hidden flex flex-col font-sans relative transition-colors duration-300 ${isLightTheme ? 'theme-light bg-neuro-bg text-neuro-text' : 'bg-black text-white'}`}>
       
+      {/* 
+        GESTURE LAYER: The "Invisible UI" 
+        This sits on top of everything to handle blind-friendly inputs
+      */}
+      <GestureLayer 
+        onDoubleTap={toggleConnection}
+        onLongPress={handleGuardianTrigger}
+        onSingleTap={handleSingleTap}
+        isConnected={isConnected}
+        privacyMode={privacyMode}
+        setPrivacyMode={setPrivacyMode}
+      />
+
       {/* Header - Safe Area Top - HIDDEN IN GUARDIAN MODE */}
-      {state.mode !== AppMode.GUARDIAN && (
-        <div className="absolute top-0 left-0 w-full p-2 pt-safe z-50 flex justify-between pointer-events-none items-start">
+      {state.mode !== AppMode.GUARDIAN && !privacyMode && (
+        <div className="absolute top-0 left-0 w-full p-2 pt-safe z-[40] flex justify-between pointer-events-none items-start">
            <div 
-              className={`pointer-events-auto flex items-center gap-2 px-3 py-2 md:px-4 md:py-3 rounded-xl border-4 ${isConnected ? 'border-[#FFD600] bg-black text-[#FFD600]' : 'border-gray-600 bg-neuro-ui text-gray-400'} mt-2 ml-2 transition-all duration-300`}
+              className={`flex items-center gap-2 px-3 py-2 md:px-4 md:py-3 rounded-xl border-4 ${isConnected ? 'border-[#FFD600] bg-black text-[#FFD600]' : 'border-gray-600 bg-neuro-ui text-gray-400'} mt-2 ml-2 transition-all duration-300`}
               role="status"
               aria-live="polite"
            >
@@ -284,19 +314,22 @@ const App: React.FC = () => {
               </span>
            </div>
            
-           <button 
-             onClick={() => dispatch({ type: 'ACTIVATE_GUARDIAN' })}
-             className="pointer-events-auto bg-[#FF4D00] text-white border-4 border-white px-4 py-2 md:px-6 md:py-3 rounded-xl font-black text-lg md:text-xl animate-pulse hover:bg-red-600 active:scale-95 shadow-xl flex items-center gap-2 mt-2 mr-2 transition-transform"
-             aria-label="Emergency Help Button. Double tap to activate Guardian Mode."
-           >
-             <ShieldAlert size={24} strokeWidth={4} /> HELP
-           </button>
+           <div className="flex items-center gap-2 mt-2 mr-2">
+               {/* Help Button (Visual Fallback) */}
+               <button 
+                onClick={() => dispatch({ type: 'ACTIVATE_GUARDIAN' })}
+                className="pointer-events-auto bg-[#FF4D00] text-white border-4 border-white px-3 py-2 rounded-xl font-black text-sm md:text-base animate-pulse hover:bg-red-600 active:scale-95 shadow-xl flex items-center gap-2 transition-transform"
+                aria-label="Emergency Help"
+               >
+                 <ShieldAlert size={20} strokeWidth={4} /> HELP
+               </button>
+           </div>
         </div>
       )}
 
       {/* Permission Error Banner */}
       {error && (
-         <div className="absolute top-32 left-4 right-4 z-50 bg-[#FF4D00] text-white p-4 rounded-xl border-4 border-white flex items-center gap-4 animate-bounce" role="alert">
+         <div className="absolute top-32 left-4 right-4 z-[60] bg-[#FF4D00] text-white p-4 rounded-xl border-4 border-white flex items-center gap-4 animate-bounce" role="alert">
             <AlertOctagon size={48} strokeWidth={3} />
             <div>
                <h2 className="text-2xl font-black uppercase">System Error</h2>
@@ -317,29 +350,28 @@ const App: React.FC = () => {
          />
       </main>
 
-      {/* Bottom Controls - Safe Area Bottom - HIDDEN IN GUARDIAN MODE */}
-      {state.mode !== AppMode.GUARDIAN && (
-        <div className="absolute bottom-6 pb-safe left-1/2 -translate-x-1/2 z-50 flex items-center justify-center w-full pointer-events-none">
-             <button 
-               onClick={toggleConnection}
-               className={`pointer-events-auto w-24 h-24 md:w-32 md:h-32 rounded-full flex items-center justify-center border-[6px] md:border-[8px] transition-all duration-200 active:scale-90 shadow-2xl ${
-                  isConnected 
-                  ? 'border-white bg-[#FFD600] text-black shadow-[0_0_50px_rgba(255,214,0,0.8)]' 
-                  : 'border-gray-500 bg-gray-800 text-gray-400'
-               }`}
-               aria-label={isConnected ? "System Active. Double tap to Stop." : "System Idle. Double tap to Start NeuroSync."}
-               title={isConnected ? "Stop" : "Start"}
-             >
-               <Power size={40} className="md:w-14 md:h-14" strokeWidth={4} />
-             </button>
+      {/* Visual Bottom Controls - Only show if disconnected or not in privacy */}
+      {state.mode !== AppMode.GUARDIAN && !isConnected && !privacyMode && (
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-[40] flex flex-col items-center justify-center w-full pointer-events-none opacity-50">
+             <div className="animate-bounce mb-2 text-center">
+                <p className="font-bold uppercase tracking-widest text-sm">Double Tap Screen</p>
+                <p className="text-xs opacity-70">to Connect</p>
+             </div>
         </div>
+      )}
+      
+      {/* Active Connection Indicator (Bottom Center) */}
+      {isConnected && !privacyMode && state.mode !== AppMode.GUARDIAN && (
+          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-[40] pointer-events-none">
+             <div className="w-16 h-1 bg-[#FFD600] rounded-full shadow-[0_0_10px_#FFD600] animate-pulse"></div>
+          </div>
       )}
 
       {/* Debug Trigger */}
       <div className="fixed top-32 right-4 z-[60]">
           <button 
             onClick={() => setShowDebug(!showDebug)} 
-            className="bg-neuro-ui p-3 rounded-full text-gray-500 hover:text-neuro-text border-2 border-gray-700 backdrop-blur-sm"
+            className="bg-neuro-ui p-3 rounded-full text-gray-500 hover:text-neuro-text border-2 border-gray-700 backdrop-blur-sm pointer-events-auto"
             aria-label="Open Debug Menu"
           >
             <Settings size={24} strokeWidth={3} />
@@ -357,7 +389,7 @@ const App: React.FC = () => {
             <div className="mb-6 flex justify-between items-center bg-gray-100 p-3 rounded border-2 border-black">
                 <div className="flex items-center gap-2">
                    {isLightTheme ? <Sun size={20} /> : <Moon size={20} />}
-                   <span>Theme: {isLightTheme ? 'Light (Astigmatism)' : 'Dark (Photophobia)'}</span>
+                   <span>Theme: {isLightTheme ? 'Light' : 'Dark'}</span>
                 </div>
                 <button 
                     onClick={() => {
@@ -376,7 +408,6 @@ const App: React.FC = () => {
                <button onClick={() => dispatch({ type: 'UPDATE_READ', payload: { text: "Latte $4.00" }})} className="bg-gray-200 p-3 hover:bg-yellow-300 border-2 border-black font-bold rounded">READ</button>
                <button onClick={() => dispatch({ type: 'UPDATE_SCAN', payload: { objectName: "Soup Can", details: "Tomato" }})} className="bg-gray-200 p-3 hover:bg-yellow-300 border-2 border-black font-bold rounded">SCAN</button>
                <button onClick={() => dispatch({ type: 'TRIGGER_DANGER', payload: "Car Backing Up!" })} className="col-span-2 bg-[#FF4D00] text-white p-3 border-2 border-black font-black uppercase rounded">! DANGER !</button>
-               <button onClick={() => dispatch({ type: 'UPDATE_PLAN', payload: { safeExitRoute: "Turn around, walk 10m to exit.", nearestLandmark: "Red Fire Hydrant", hazardSummary: "Slippery Floor", recommendedAction: "Exit Immediately" }})} className="col-span-2 bg-[#0047AB] text-white p-3 border-2 border-black font-bold rounded">GENERATE PLAN</button>
             </div>
 
             <div className="border-t-4 border-black pt-3">

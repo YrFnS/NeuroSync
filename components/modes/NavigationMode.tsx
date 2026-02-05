@@ -5,7 +5,7 @@ import { NeuroState } from '../../types';
 export const NavigationMode: React.FC<{ data: NeuroState['navData'] }> = ({ data }) => {
   if (!data) return null;
 
-  let bgColor = "bg-[#FFD600]"; // Safety Yellow (Default Go)
+  let bgColor = "bg-signal-green"; // Signal Green (Default Go)
   let textColor = "text-black";
   let label = "MOVE";
   
@@ -16,7 +16,7 @@ export const NavigationMode: React.FC<{ data: NeuroState['navData'] }> = ({ data
   const isCrosswalk = data.direction === 'CROSSWALK';
 
   if (isStop) { 
-    bgColor = "bg-[#FF4D00]"; // Signal Orange
+    bgColor = "bg-signal-red"; // Signal Red
     textColor = "text-white";
     label = "STOP"; 
   }
@@ -83,11 +83,11 @@ export const NavigationMode: React.FC<{ data: NeuroState['navData'] }> = ({ data
         High priority interrupt
       */}
       {data.hazard && (
-        <div className="absolute inset-0 bg-[#FF4D00] flex flex-col items-center justify-center z-[100] flash-danger p-6 text-center" role="alert">
+        <div className="absolute inset-0 bg-signal-red flex flex-col items-center justify-center z-[100] flash-danger p-6 text-center" role="alert">
           <AlertTriangle size={120} className="mb-6 text-black" fill="white" strokeWidth={3} />
           <h1 className="text-[10vh] font-black text-white mb-4 leading-none tracking-tighter">DANGER</h1>
           <div className="bg-black w-full py-6 px-4 rounded-3xl border-[6px] border-white shadow-2xl">
-             <p className="text-3xl md:text-5xl font-bold text-[#FFD600] uppercase break-words leading-tight">{data.hazard}</p>
+             <p className="text-3xl md:text-5xl font-bold text-white uppercase break-words leading-tight">{data.hazard}</p>
           </div>
         </div>
       )}

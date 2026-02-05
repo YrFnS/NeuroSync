@@ -23,6 +23,8 @@
               'neuro-bg': 'var(--bg-primary)',
               'neuro-text': 'var(--text-primary)',
               'neuro-ui': 'var(--bg-ui)',
+              'signal-green': 'var(--signal-green)',
+              'signal-red': 'var(--signal-red)',
             }
           }
         }
@@ -42,6 +44,8 @@
         
         --safety-yellow: #FFD600;
         --signal-orange: #FF4D00;
+        --signal-green: #00FF94;
+        --signal-red: #FF1F1F;
         --cobalt-blue: #0047AB;
         
         --bg-primary: #000000;
@@ -96,8 +100,8 @@
       }
 
       @keyframes flash-red {
-        0%, 100% { background-color: var(--signal-orange); color: black; }
-        50% { background-color: black; color: var(--signal-orange); }
+        0%, 100% { background-color: var(--signal-red); color: white; }
+        50% { background-color: black; color: var(--signal-red); }
       }
 
       /* Leaflet Customization for High Contrast */
@@ -107,13 +111,13 @@
       }
       .leaflet-popup-content-wrapper {
         background: #000;
-        color: var(--safety-yellow);
-        border: 2px solid var(--safety-yellow);
+        color: var(--signal-green);
+        border: 2px solid var(--signal-green);
         border-radius: 4px;
         font-weight: bold;
       }
       .leaflet-popup-tip {
-        background: var(--safety-yellow);
+        background: var(--signal-green);
       }
       
       .font-mono {
