@@ -20,6 +20,7 @@ export const LiquidDisplay: React.FC<Props> = ({ state, videoStream, onExitGuard
   useEffect(() => {
     if (state.guardianData.eventLog.length > 0) {
       const lastEvent = state.guardianData.eventLog[0];
+      // Show toast if we just learned something new (OBJECT_SEEN) and we aren't already looking at the map
       if (lastEvent.type === 'OBJECT_SEEN' && state.mode !== AppMode.GUARDIAN) {
         setShowMemoryToast(lastEvent.description);
         const timer = setTimeout(() => setShowMemoryToast(null), 4000); 
