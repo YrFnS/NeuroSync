@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useRef, useState, useCallback } from 'react';
 import { GoogleGenAI, LiveServerMessage, Modality } from "@google/genai";
 import { MODEL_NAME, SYSTEM_INSTRUCTION, TOOLS } from '../constants';
 
@@ -46,21 +46,24 @@ function decode(base64: string) {
 interface UseLiveSessionProps {
   onToolCall: (name: string, args: any) => Promise<any>;
   onTranscript: (text: string) => void;
+  apiKey?: string;
 }
 
-export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps) => {
+export const useLiveSession = ({ onToolCall, onTranscript, apiKey }: UseLiveSessionProps) => {
   const [isConnected, setIsConnected] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
   
   // Refs for cleanup and stability
-  const sessionRef = useRef<any>(null);
+  const sessionRef = useRef<Promise<any> | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const inputAudioContextRef = useRef<AudioContext | null>(null);
   const nextStartTimeRef = useRef<number>(0);
   const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
+  const videoIntervalRef = useRef<number | null>(null);
 
   // Capture current frame as base64 JPEG
   const getSnapshot = useCallback((): string | undefined => {
@@ -68,7 +71,6 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
       const ctx = canvasRef.current.getContext('2d');
       if (ctx) {
           ctx.drawImage(videoRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height);
-          // Return valid data URL
           return canvasRef.current.toDataURL('image/jpeg', 0.6);
       }
       return undefined;
@@ -77,16 +79,19 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
   // Connect to Gemini
   const connect = useCallback(async () => {
     setError(null);
-    if (!process.env.API_KEY) {
+    const key = apiKey || process.env.API_KEY;
+    if (!key) {
       setError("API Key Missing");
       return;
     }
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+      await audioContext.resume();
       audioContextRef.current = audioContext;
 
+      const ai = new GoogleGenAI({ apiKey: key });
+      
       // Start Camera & Mic
       const mediaStream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
@@ -96,7 +101,7 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
         video: { 
           width: 640, 
           height: 480, 
-          frameRate: 30 // Request higher native frame rate
+          frameRate: 30
         } 
       });
       setVideoStream(mediaStream);
@@ -120,6 +125,8 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
 
             // Audio Input Handling
             const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+            inputAudioContextRef.current = inputCtx;
+            
             const source = inputCtx.createMediaStreamSource(mediaStream);
             const processor = inputCtx.createScriptProcessor(4096, 1, 1);
             
@@ -127,17 +134,21 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
                const inputData = e.inputBuffer.getChannelData(0);
                const blob = createBlob(inputData);
                
-               // Send Audio
+               // Send Audio via FileReader
                sessionPromise.then(session => {
                   const reader = new FileReader();
                   reader.onloadend = () => {
-                    const base64data = (reader.result as string).split(',')[1];
-                    session.sendRealtimeInput({
-                        media: {
-                            mimeType: 'audio/pcm;rate=16000',
-                            data: base64data
-                        }
-                    });
+                    const res = reader.result as string;
+                    // Safety check for data URL format
+                    if (res && res.includes(',')) {
+                        const base64data = res.split(',')[1];
+                        session.sendRealtimeInput({
+                            media: {
+                                mimeType: 'audio/pcm;rate=16000',
+                                data: base64data
+                            }
+                        });
+                    }
                   };
                   reader.readAsDataURL(blob);
                });
@@ -157,6 +168,7 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
                 source.connect(ctx.destination);
                 
                 const now = ctx.currentTime;
+                // Schedule next chunk to ensure gapless playback
                 const start = Math.max(now, nextStartTimeRef.current);
                 source.start(start);
                 nextStartTimeRef.current = start + buffer.duration;
@@ -187,6 +199,7 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
             }
           },
           onclose: () => {
+             console.log("Gemini Closed");
              setIsConnected(false);
              setIsStreaming(false);
           },
@@ -214,12 +227,12 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
       const ctx = canvas.getContext('2d');
 
       // Increased sampling rate for "Danger Sense" (200ms = 5fps)
-      // Standard 500ms is too slow for cars/hazards
-      const videoInterval = setInterval(async () => {
+      if (videoIntervalRef.current) clearInterval(videoIntervalRef.current);
+      
+      videoIntervalRef.current = window.setInterval(async () => {
         if (!ctx || !videoEl) return;
         ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
         
-        // Use lower quality for speed (0.5), still sufficient for Gemini Flash reasoning
         const base64 = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
         
         const session = await sessionPromise;
@@ -232,21 +245,43 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
 
       }, 200);
 
-      return () => {
-         clearInterval(videoInterval);
-      }
-
     } catch (e: any) {
       console.error("Connection failed", e);
       setError(e.message || "Permissions Denied");
     }
-  }, [onToolCall]);
+  }, [onToolCall, apiKey]);
 
-  const disconnect = () => {
-    if (sessionRef.current) {
-        window.location.reload(); 
+  const disconnect = useCallback(() => {
+    // Clean up intervals
+    if (videoIntervalRef.current) {
+        clearInterval(videoIntervalRef.current);
+        videoIntervalRef.current = null;
     }
-  };
+    
+    // Stop tracks
+    if (videoStream) {
+        videoStream.getTracks().forEach(track => track.stop());
+        setVideoStream(null);
+    }
+
+    // Close Audio Contexts
+    if (audioContextRef.current) {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
+    }
+    if (inputAudioContextRef.current) {
+        inputAudioContextRef.current.close();
+        inputAudioContextRef.current = null;
+    }
+
+    // Reset state
+    setIsConnected(false);
+    setIsStreaming(false);
+    sessionRef.current = null;
+    
+    // Optional: hard reload if deep cleanup is needed
+    // window.location.reload(); 
+  }, [videoStream]);
 
   return { connect, disconnect, isConnected, isStreaming, videoStream, error, getSnapshot };
 };

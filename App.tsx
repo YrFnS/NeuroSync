@@ -229,7 +229,8 @@ const App: React.FC = () => {
 
   const { connect, disconnect, isConnected, videoStream, error, getSnapshot } = useLiveSession({
     onToolCall: handleToolCall,
-    onTranscript: handleTranscript
+    onTranscript: handleTranscript,
+    apiKey // Pass the apiKey explicitly
   });
 
   // Keep ref updated
@@ -243,13 +244,10 @@ const App: React.FC = () => {
       disconnect();
       dispatch({ type: 'SET_MODE', payload: AppMode.IDLE });
     } else {
-      if (!process.env.API_KEY && !apiKey) {
+      if (!apiKey) {
         soundEngine.speakSystem("Error. API Key missing.");
         alert("Please set API_KEY in env or use the debug panel.");
         return;
-      }
-      if (!process.env.API_KEY && apiKey) {
-        process.env.API_KEY = apiKey;
       }
       soundEngine.speakSystem("Connecting to Gemini Live.");
       soundEngine.playModeSwitch();
