@@ -75,6 +75,11 @@ class SoundEngine {
     }
 
     public speakSystem(text: string) {
+        if (!this.synth) return;
+        
+        // Duck SFX when system speaks
+        this.duck();
+
         if (this.synth.speaking) {
             this.synth.cancel();
         }
@@ -82,6 +87,11 @@ class SoundEngine {
         utterance.rate = 1.2; 
         utterance.pitch = 1.0;
         utterance.volume = 1.0;
+        
+        utterance.onend = () => {
+             this.unduck();
+        };
+
         this.synth.speak(utterance);
     }
 

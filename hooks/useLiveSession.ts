@@ -47,7 +47,7 @@ function decode(base64: string) {
 
 interface UseLiveSessionProps {
   onToolCall: (name: string, args: any) => Promise<any>;
-  onTranscript: (text: string) => void;
+  onTranscript: (text: string, isUser: boolean) => void;
   apiKey?: string;
   mode: AppMode;
   location?: { lat: number; lng: number } | null;
@@ -193,6 +193,9 @@ Visibility: Conditions may vary. Rely on audio cues if video is dark.`;
         config: {
           systemInstruction: dynamicSystemInstruction,
           responseModalities: [Modality.AUDIO],
+          // ENABLE TRANSCRIPTION FOR GUARDIAN LOGGING
+          inputAudioTranscription: { model: "gemini-2.5-flash" },
+          outputAudioTranscription: { model: "gemini-2.5-flash" },
           tools: [{ functionDeclarations: TOOLS }],
           speechConfig: {
             voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } }
@@ -234,6 +237,16 @@ Visibility: Conditions may vary. Rely on audio cues if video is dark.`;
             processor.connect(inputCtx.destination);
           },
           onmessage: async (msg: LiveServerMessage) => {
+            // Handle Transcripts
+            const inputTranscript = msg.serverContent?.inputTranscription?.text;
+            if (inputTranscript) {
+                onTranscript(inputTranscript, true);
+            }
+            const outputTranscript = msg.serverContent?.outputTranscription?.text;
+            if (outputTranscript) {
+                onTranscript(outputTranscript, false);
+            }
+
             // Handle Audio Output
             const audioData = msg.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (audioData && audioContextRef.current) {
@@ -249,6 +262,7 @@ Visibility: Conditions may vary. Rely on audio cues if video is dark.`;
                 source.connect(ctx.destination);
                 
                 const now = ctx.currentTime;
+                // Proper streaming scheduler
                 const start = Math.max(now, nextStartTimeRef.current);
                 source.start(start);
                 nextStartTimeRef.current = start + buffer.duration;

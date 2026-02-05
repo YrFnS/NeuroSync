@@ -45,6 +45,7 @@ const App: React.FC = () => {
   // Initial Startup
   useEffect(() => {
      const timer = setTimeout(() => {
+         // Attempt to speak, but browser may block if no interaction.
          soundEngine.speakSystem("NeuroSync Online. Double tap screen to connect. Swipe down with two fingers for privacy curtain.");
      }, 1000);
      return () => clearTimeout(timer);
@@ -70,7 +71,12 @@ const App: React.FC = () => {
   });
 
   // --- AI INTEGRATION ---
-  const handleTranscript = (text: string) => {};
+  const handleTranscript = useCallback((text: string, isUser: boolean) => {
+      // Accumulate transcript lines
+      const prefix = isUser ? "USER: " : "AI: ";
+      dispatch({ type: 'ADD_TRANSCRIPT', payload: `${prefix}${text}` });
+  }, [dispatch]);
+
   const getSnapshotRef = useRef<() => string | undefined>(() => undefined);
 
   const handleToolCall = useCallback(async (name: string, args: any) => {

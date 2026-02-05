@@ -81,7 +81,17 @@ export const GuardianMode: React.FC<Props> = ({ data, videoStream, onExit }) => 
     markersRef.current.addTo(map);
     mapInstanceRef.current = map;
 
-    return () => { map.remove(); mapInstanceRef.current = null; };
+    // Handle Resize
+    const resizeObserver = new ResizeObserver(() => {
+       map.invalidateSize();
+    });
+    resizeObserver.observe(mapContainerRef.current);
+
+    return () => { 
+        resizeObserver.disconnect();
+        map.remove(); 
+        mapInstanceRef.current = null; 
+    };
   }, []);
 
   // Update Map
