@@ -55,12 +55,13 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
   const [videoStream, setVideoStream] = useState<MediaStream | null>(null);
   
   // Refs for cleanup and stability
-  const sessionRef = useRef<any>(null);
+  const sessionRef = useRef<Promise<any> | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const nextStartTimeRef = useRef<number>(0);
   const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
+  const videoIntervalRef = useRef<number | null>(null);
 
   // Capture current frame as base64 JPEG
   const getSnapshot = useCallback((): string | undefined => {
@@ -83,10 +84,12 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
     }
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+      await audioContext.resume();
       audioContextRef.current = audioContext;
 
+      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      
       // Start Camera & Mic
       const mediaStream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
@@ -131,13 +134,16 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
                sessionPromise.then(session => {
                   const reader = new FileReader();
                   reader.onloadend = () => {
-                    const base64data = (reader.result as string).split(',')[1];
-                    session.sendRealtimeInput({
-                        media: {
-                            mimeType: 'audio/pcm;rate=16000',
-                            data: base64data
-                        }
-                    });
+                    const res = reader.result as string;
+                    if (res && res.includes(',')) {
+                        const base64data = res.split(',')[1];
+                        session.sendRealtimeInput({
+                            media: {
+                                mimeType: 'audio/pcm;rate=16000',
+                                data: base64data
+                            }
+                        });
+                    }
                   };
                   reader.readAsDataURL(blob);
                });
@@ -187,6 +193,7 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
             }
           },
           onclose: () => {
+             console.log("Gemini Closed");
              setIsConnected(false);
              setIsStreaming(false);
           },
@@ -215,7 +222,7 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
 
       // Increased sampling rate for "Danger Sense" (200ms = 5fps)
       // Standard 500ms is too slow for cars/hazards
-      const videoInterval = setInterval(async () => {
+      videoIntervalRef.current = window.setInterval(async () => {
         if (!ctx || !videoEl) return;
         ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
         
@@ -233,7 +240,7 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
       }, 200);
 
       return () => {
-         clearInterval(videoInterval);
+         if (videoIntervalRef.current) clearInterval(videoIntervalRef.current);
       }
 
     } catch (e: any) {
@@ -242,11 +249,27 @@ export const useLiveSession = ({ onToolCall, onTranscript }: UseLiveSessionProps
     }
   }, [onToolCall]);
 
-  const disconnect = () => {
-    if (sessionRef.current) {
-        window.location.reload(); 
+  const disconnect = useCallback(() => {
+    // Clean up streams and intervals
+    if (videoIntervalRef.current) {
+        clearInterval(videoIntervalRef.current);
+        videoIntervalRef.current = null;
     }
-  };
+    
+    if (videoStream) {
+        videoStream.getTracks().forEach(track => track.stop());
+        setVideoStream(null);
+    }
+
+    if (audioContextRef.current) {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
+    }
+
+    // Force hard reload to ensure all WebSockets and memory are cleared
+    // This is often safer for complex WebAudio/WebRTC interactions
+    window.location.reload();
+  }, [videoStream]);
 
   return { connect, disconnect, isConnected, isStreaming, videoStream, error, getSnapshot };
 };

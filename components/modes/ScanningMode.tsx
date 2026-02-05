@@ -3,33 +3,40 @@ import { NeuroState } from '../../types';
 
 export const ScanningMode: React.FC<{ data: NeuroState['scanData'] }> = ({ data }) => {
   return (
-    <div className="flex flex-col h-full w-full bg-black p-4">
+    <div className="flex flex-col h-full w-full bg-black">
       
       {/* Top Label */}
-      <div className="mt-8 mb-4 text-center">
-        <span className="bg-[#0047AB] text-white px-6 py-2 rounded-full text-xl font-bold uppercase tracking-widest">
+      <div className="mb-4 text-center">
+        <span className="bg-[#0047AB] text-white px-6 py-2 rounded-full text-xl font-bold uppercase tracking-widest border-2 border-white">
           Scanner Active
         </span>
       </div>
 
-      {/* High Visibility Viewfinder - Simplified */}
-      <div className="flex-1 relative border-[12px] border-white rounded-3xl m-4 flex items-center justify-center">
-         {/* Crosshair */}
-         <div className="absolute w-8 h-8 bg-[#0047AB] rounded-full opacity-50"></div>
+      {/* High Visibility Viewfinder */}
+      <div className="flex-1 relative border-[8px] md:border-[12px] border-white rounded-3xl flex items-center justify-center overflow-hidden bg-gray-900/50">
+         {/* Corner Markers */}
+         <div className="absolute top-0 left-0 w-12 h-12 border-t-[12px] border-l-[12px] border-[#FFD600]"></div>
+         <div className="absolute top-0 right-0 w-12 h-12 border-t-[12px] border-r-[12px] border-[#FFD600]"></div>
+         <div className="absolute bottom-0 left-0 w-12 h-12 border-b-[12px] border-l-[12px] border-[#FFD600]"></div>
+         <div className="absolute bottom-0 right-0 w-12 h-12 border-b-[12px] border-r-[12px] border-[#FFD600]"></div>
+         
+         {/* Center Crosshair */}
+         <div className="absolute w-4 h-4 bg-[#FFD600] rounded-full z-0 opacity-50"></div>
          
          {!data ? (
-            <p className="text-2xl text-gray-400 font-bold animate-pulse">Analyzing...</p>
+            <p className="text-2xl text-gray-400 font-bold animate-pulse z-10">Analyzing Object...</p>
          ) : (
-             <div className="text-center p-6 bg-black/90 w-full h-full flex flex-col items-center justify-center rounded-2xl">
-                <h1 className="text-6xl font-black text-white mb-6 uppercase leading-tight">{data.objectName}</h1>
-                <p className="text-3xl font-bold text-[#FFD600] leading-snug">{data.details}</p>
+             <div className="text-center p-6 bg-black/80 backdrop-blur-md w-full h-full flex flex-col items-center justify-center z-10">
+                <h1 className="text-5xl md:text-6xl font-black text-white mb-6 uppercase leading-tight drop-shadow-lg">{data.objectName}</h1>
+                <div className="w-16 h-2 bg-[#FFD600] mb-6"></div>
+                <p className="text-2xl md:text-3xl font-bold text-[#FFD600] leading-snug">{data.details}</p>
              </div>
          )}
       </div>
 
       {/* Footer Instructions */}
-      <div className="mb-8 text-center">
-          <p className="text-gray-500 font-bold text-xl">Hold object steady in frame</p>
+      <div className="mt-4 text-center">
+          <p className="text-gray-500 font-bold text-lg md:text-xl">Hold object steady in frame</p>
       </div>
 
     </div>

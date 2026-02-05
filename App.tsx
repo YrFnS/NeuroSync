@@ -83,6 +83,8 @@ function reducer(state: NeuroState, action: ActionType): NeuroState {
               location: action.payload
           }
       };
+    case 'SET_STREAMING':
+      return { ...state, isAudioStreaming: action.payload };
     default:
       return state;
   }
@@ -222,6 +224,7 @@ const App: React.FC = () => {
     if (isConnected) {
       soundEngine.speakSystem("Disconnecting.");
       disconnect();
+      dispatch({ type: 'SET_MODE', payload: AppMode.IDLE });
     } else {
       if (!process.env.API_KEY && !apiKey) {
         soundEngine.speakSystem("Error. API Key missing.");
@@ -240,31 +243,33 @@ const App: React.FC = () => {
   return (
     <div className="h-[100dvh] w-screen bg-black text-white overflow-hidden flex flex-col font-sans relative">
       
-      {/* Header - Safe Area Top */}
-      <div className="absolute top-0 left-0 w-full p-2 pt-safe z-50 flex justify-between pointer-events-none items-start">
-         <div 
-            className={`pointer-events-auto flex items-center gap-2 px-3 py-2 md:px-4 md:py-3 rounded-xl border-4 ${isConnected ? 'border-[#FFD600] bg-black text-[#FFD600]' : 'border-gray-600 bg-gray-900 text-gray-400'} mt-2 ml-2`}
-            role="status"
-            aria-live="polite"
-         >
-            <Activity className={`${isConnected ? 'animate-pulse' : ''}`} size={20} strokeWidth={4} />
-            <span className="font-bold text-base md:text-lg tracking-wider">
-                {isConnected ? 'LIVE' : 'OFF'}
-            </span>
-         </div>
-         
-         <button 
-           onClick={() => dispatch({ type: 'ACTIVATE_GUARDIAN' })}
-           className="pointer-events-auto bg-[#FF4D00] text-white border-4 border-white px-4 py-2 md:px-6 md:py-3 rounded-xl font-black text-lg md:text-xl animate-pulse hover:bg-red-600 active:scale-95 shadow-xl flex items-center gap-2 mt-2 mr-2"
-           aria-label="Emergency Help Button. Double tap to activate Guardian Mode."
-         >
-           <ShieldAlert size={24} strokeWidth={4} /> HELP
-         </button>
-      </div>
+      {/* Header - Safe Area Top - HIDDEN IN GUARDIAN MODE */}
+      {state.mode !== AppMode.GUARDIAN && (
+        <div className="absolute top-0 left-0 w-full p-2 pt-safe z-50 flex justify-between pointer-events-none items-start">
+           <div 
+              className={`pointer-events-auto flex items-center gap-2 px-3 py-2 md:px-4 md:py-3 rounded-xl border-4 ${isConnected ? 'border-[#FFD600] bg-black text-[#FFD600]' : 'border-gray-600 bg-gray-900 text-gray-400'} mt-2 ml-2 transition-all duration-300`}
+              role="status"
+              aria-live="polite"
+           >
+              <Activity className={`${isConnected ? 'animate-pulse' : ''}`} size={20} strokeWidth={4} />
+              <span className="font-bold text-base md:text-lg tracking-wider">
+                  {isConnected ? 'LIVE' : 'OFF'}
+              </span>
+           </div>
+           
+           <button 
+             onClick={() => dispatch({ type: 'ACTIVATE_GUARDIAN' })}
+             className="pointer-events-auto bg-[#FF4D00] text-white border-4 border-white px-4 py-2 md:px-6 md:py-3 rounded-xl font-black text-lg md:text-xl animate-pulse hover:bg-red-600 active:scale-95 shadow-xl flex items-center gap-2 mt-2 mr-2 transition-transform"
+             aria-label="Emergency Help Button. Double tap to activate Guardian Mode."
+           >
+             <ShieldAlert size={24} strokeWidth={4} /> HELP
+           </button>
+        </div>
+      )}
 
       {/* Permission Error Banner */}
       {error && (
-         <div className="absolute top-24 left-4 right-4 z-50 bg-[#FF4D00] text-white p-4 rounded-xl border-4 border-white flex items-center gap-4 animate-bounce" role="alert">
+         <div className="absolute top-32 left-4 right-4 z-50 bg-[#FF4D00] text-white p-4 rounded-xl border-4 border-white flex items-center gap-4 animate-bounce" role="alert">
             <AlertOctagon size={48} strokeWidth={3} />
             <div>
                <h2 className="text-2xl font-black uppercase">System Error</h2>
@@ -274,7 +279,7 @@ const App: React.FC = () => {
       )}
 
       {/* Main Content */}
-      <main className="flex-1 relative z-0 h-full w-full" role="main" aria-live="polite">
+      <main className="flex-1 relative z-0 h-full w-full bg-black" role="main" aria-live="polite">
          <LiquidDisplay 
             state={state} 
             videoStream={videoStream} 
@@ -282,7 +287,7 @@ const App: React.FC = () => {
          />
       </main>
 
-      {/* Bottom Controls - Safe Area Bottom */}
+      {/* Bottom Controls - Safe Area Bottom - HIDDEN IN GUARDIAN MODE */}
       {state.mode !== AppMode.GUARDIAN && (
         <div className="absolute bottom-6 pb-safe left-1/2 -translate-x-1/2 z-50 flex items-center justify-center w-full pointer-events-none">
              <button 
@@ -301,10 +306,10 @@ const App: React.FC = () => {
       )}
 
       {/* Debug Trigger */}
-      <div className="fixed top-24 right-4 z-[60]">
+      <div className="fixed top-32 right-4 z-[60]">
           <button 
             onClick={() => setShowDebug(!showDebug)} 
-            className="bg-black/50 p-3 rounded-full text-gray-500 hover:text-white border-2 border-gray-700"
+            className="bg-black/50 p-3 rounded-full text-gray-500 hover:text-white border-2 border-gray-700 backdrop-blur-sm"
             aria-label="Open Debug Menu"
           >
             <Settings size={24} strokeWidth={3} />

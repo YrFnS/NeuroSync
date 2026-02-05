@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ShieldAlert, Radio, Share2, Check, Copy, Video, X, MapPin, Footprints, AlertTriangle, ArrowRightCircle, Image as ImageIcon } from 'lucide-react';
+import { ShieldAlert, Radio, Share2, Check, Copy, Video, X, Terminal, Footprints, AlertTriangle } from 'lucide-react';
 import { NeuroState } from '../../types';
 import L from 'leaflet';
 
@@ -30,23 +30,9 @@ export const GuardianMode: React.FC<Props> = ({ data, videoStream, onExit }) => 
   // Leaflet Icons
   const userIcon = L.divIcon({
     className: 'custom-div-icon',
-    html: `<div style="background-color: #00FF94; width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 10px #00FF94; border: 2px solid white;"></div>`,
-    iconSize: [12, 12],
-    iconAnchor: [6, 6]
-  });
-
-  const hazardIcon = L.divIcon({
-    className: 'custom-div-icon',
-    html: `<div style="background-color: #FF2E2E; width: 10px; height: 10px; transform: rotate(45deg); box-shadow: 0 0 10px #FF2E2E;"></div>`,
-    iconSize: [10, 10],
-    iconAnchor: [5, 5]
-  });
-
-  const objectIcon = L.divIcon({
-    className: 'custom-div-icon',
-    html: `<div style="background-color: #2E94FF; width: 8px; height: 8px; border-radius: 2px; box-shadow: 0 0 10px #2E94FF;"></div>`,
-    iconSize: [8, 8],
-    iconAnchor: [4, 4]
+    html: `<div style="background-color: #00FF94; width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 15px #00FF94; border: 2px solid white;"></div>`,
+    iconSize: [14, 14],
+    iconAnchor: [7, 7]
   });
 
   const copyLink = () => {
@@ -62,7 +48,7 @@ export const GuardianMode: React.FC<Props> = ({ data, videoStream, onExit }) => 
     const initialLng = data.location?.lng || -74.0060;
 
     const map = L.map(mapContainerRef.current, { zoomControl: false, attributionControl: false, dragging: !L.Browser.mobile })
-      .setView([initialLat, initialLng], 15);
+      .setView([initialLat, initialLng], 16);
 
     L.tileLayer(DARK_TILES, { attribution: TILE_ATTR, maxZoom: 20 }).addTo(map);
     markersRef.current.addTo(map);
@@ -79,139 +65,125 @@ export const GuardianMode: React.FC<Props> = ({ data, videoStream, onExit }) => 
 
     if (data.location) {
         L.marker([data.location.lat, data.location.lng], { icon: userIcon })
-         .bindPopup("USER LOCATION")
+         .bindPopup("TARGET: USER")
          .addTo(markersRef.current);
+        map.panTo([data.location.lat, data.location.lng], { animate: true });
     }
-
-    data.eventLog.forEach(event => {
-        if (event.coordinates) {
-            const icon = event.type === 'HAZARD_DETECTED' ? hazardIcon : objectIcon;
-            const marker = L.marker([event.coordinates.lat, event.coordinates.lng], { icon })
-             .addTo(markersRef.current);
-            
-            let popupContent = `<b>${event.type}</b><br>${event.description}`;
-            if (event.snapshot) {
-                popupContent += `<br><img src="${event.snapshot}" style="width:100px; margin-top:5px; border:1px solid white;">`;
-            }
-            marker.bindPopup(popupContent);
-        }
-    });
-  }, [data.location, data.eventLog]);
+  }, [data.location]);
 
   return (
-    <div className="flex flex-col h-full w-full bg-slate-900 p-2 md:p-4 animate-in slide-in-from-right duration-500 overflow-y-auto tactical-grid pb-safe">
+    <div className="flex flex-col h-full w-full bg-[#050505] p-2 md:p-4 animate-in slide-in-from-right duration-500 overflow-y-auto pb-safe font-mono">
       
-      {/* Dashboard Header */}
-      <div className="flex items-center justify-between mb-4 bg-black/60 p-2 rounded border border-slate-700 backdrop-blur-sm sticky top-0 z-50">
+      {/* Tactical Header */}
+      <div className="flex items-center justify-between mb-4 bg-red-900/10 border-b border-red-500/30 pb-2 sticky top-0 z-50 backdrop-blur-md">
           <div className="flex items-center gap-3 text-red-500">
-              <ShieldAlert size={28} className="animate-pulse" />
+              <ShieldAlert size={32} className="animate-pulse" />
               <div className="leading-none">
-                 <h1 className="text-lg md:text-xl font-black font-mono tracking-tighter text-white">GUARDIAN<span className="text-red-500">_LINK</span></h1>
-                 <p className="text-[10px] text-gray-400 font-mono">SECURE CONNECTION // LIVE</p>
+                 <h1 className="text-xl font-black tracking-tighter text-white">GUARDIAN<span className="text-red-500">_LINK</span></h1>
+                 <p className="text-[10px] text-red-400 opacity-80">EMERGENCY PROTOCOL ACTIVE</p>
               </div>
           </div>
-          <button onClick={onExit} className="bg-red-500/10 text-red-500 border border-red-500/50 px-3 py-1.5 rounded font-bold hover:bg-red-500 hover:text-white flex items-center gap-2 transition-all text-xs md:text-sm">
-             <X size={16} /> CLOSE
+          <button onClick={onExit} className="bg-red-500/10 text-red-500 border border-red-500/50 px-4 py-2 rounded font-bold hover:bg-red-500 hover:text-white flex items-center gap-2 transition-all text-sm">
+             <X size={16} /> ABORT
           </button>
       </div>
 
-      {/* Grid Layout - Stacks on mobile */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1 min-h-0">
          
-         {/* LEFT COL: Video & Map */}
+         {/* LEFT COL: Live Intel */}
          <div className="lg:col-span-1 flex flex-col gap-4">
-             {/* Live Video Feed */}
-             <div className="bg-black rounded-lg border border-slate-700 overflow-hidden relative aspect-video flex flex-col shadow-lg shrink-0">
-                <div className="absolute top-2 left-2 z-10 bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded animate-pulse flex items-center gap-1 font-mono">
-                    <div className="w-2 h-2 bg-white rounded-full"></div> LIVE FEED
+             {/* Live Video Feed with HUD */}
+             <div className="bg-black rounded border border-slate-700 overflow-hidden relative aspect-video flex flex-col shadow-lg shrink-0 group">
+                <div className="absolute top-2 left-2 z-10 bg-red-600/80 backdrop-blur text-white text-[10px] font-bold px-2 py-0.5 rounded animate-pulse flex items-center gap-1">
+                    <div className="w-2 h-2 bg-white rounded-full"></div> LIVE_FEED
                 </div>
                 {videoStream ? (
-                    <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover opacity-80" />
+                    <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity" />
                 ) : (
-                    <div className="flex items-center justify-center h-full text-gray-500 font-mono text-sm bg-slate-900">
-                        <Video size={40} className="mb-2 opacity-50" />
-                        NO SIGNAL
-                    </div>
+                    <div className="flex items-center justify-center h-full text-gray-500 text-sm">NO SIGNAL</div>
                 )}
-                <div className="absolute inset-0 border-[1px] border-white/10 pointer-events-none"></div>
+                <div className="absolute inset-0 border-[1px] border-white/5 pointer-events-none grid grid-cols-3 grid-rows-3 opacity-20">
+                     <div className="border-r border-b border-white"></div>
+                     <div className="border-r border-b border-white"></div>
+                     <div className="border-b border-white"></div>
+                </div>
              </div>
 
              {/* Map Container */}
-             <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden relative min-h-[200px] flex-1 lg:flex-auto flex flex-col shadow-lg">
-                <div ref={mapContainerRef} className="absolute inset-0 w-full h-full z-0 opacity-80 mix-blend-lighten" />
-                <div className="absolute bottom-2 left-2 z-[400] bg-black/80 p-1.5 rounded border border-gray-700 text-[10px] font-mono text-green-400 pointer-events-none">
-                  LOC: {data.location ? "GPS_LOCKED" : "SEARCHING..."}
+             <div className="bg-slate-900 rounded border border-slate-700 overflow-hidden relative min-h-[250px] flex-1 lg:flex-auto flex flex-col shadow-lg">
+                <div ref={mapContainerRef} className="absolute inset-0 w-full h-full z-0 opacity-80 grayscale contrast-125" />
+                <div className="absolute bottom-2 left-2 z-[400] bg-black/90 p-1 rounded border border-green-900 text-[10px] text-green-500 pointer-events-none">
+                  GPS_LOCK: {data.location ? `${data.location.lat.toFixed(4)}, ${data.location.lng.toFixed(4)}` : "ACQUIRING..."}
                 </div>
              </div>
          </div>
 
-         {/* CENTER COL: Generative Plan */}
-         <div className="lg:col-span-2 flex flex-col gap-4 min-h-[400px]">
+         {/* CENTER COL: Generative Plan & Terminal */}
+         <div className="lg:col-span-2 flex flex-col gap-4">
             
-            {/* Generated Plan Card */}
-            <div className="bg-black/40 border border-slate-600 rounded-lg p-1 backdrop-blur-sm flex-1 flex flex-col">
-                <div className="bg-slate-800/50 p-2 border-b border-slate-700 flex justify-between items-center">
-                   <h2 className="text-sm font-bold text-blue-400 font-mono flex items-center gap-2">
-                     <Share2 size={16} /> TACTICAL RESPONSE PLAN
+            {/* AI Response Plan */}
+            <div className="bg-slate-900/50 border border-slate-700 rounded p-1 flex-1 flex flex-col min-h-[300px]">
+                <div className="bg-slate-900 p-2 border-b border-slate-800 flex justify-between items-center">
+                   <h2 className="text-sm font-bold text-blue-400 flex items-center gap-2">
+                     <Terminal size={14} /> AI_TACTICAL_RESPONSE
                    </h2>
-                   {!data.plan && <span className="text-[10px] text-yellow-400 animate-pulse font-mono">GENERATING...</span>}
                 </div>
                 
-                <div className="p-4 flex-1 overflow-y-auto max-h-[400px] lg:max-h-none">
+                <div className="p-4 flex-1 overflow-y-auto">
                     {data.plan ? (
                         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
-                            <div className="bg-blue-900/20 border-l-4 border-blue-500 p-4 rounded-r-lg">
-                                <h3 className="text-blue-300 text-xs font-mono uppercase mb-1">Recommended Action</h3>
-                                <p className="text-xl text-white font-bold leading-tight">{data.plan.recommendedAction}</p>
+                            
+                            <div className="border-l-2 border-blue-500 pl-4">
+                                <h3 className="text-blue-500 text-[10px] uppercase mb-1 tracking-widest">Primary Objective</h3>
+                                <p className="text-2xl text-white font-bold leading-tight">{data.plan.recommendedAction}</p>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="bg-slate-800/40 p-3 rounded border border-slate-700">
+                                <div className="bg-green-900/10 p-3 rounded border border-green-900/30">
                                     <div className="flex items-center gap-2 text-green-400 mb-2">
-                                        <Footprints size={18} />
-                                        <h3 className="text-xs font-mono uppercase">Safe Route</h3>
+                                        <Footprints size={16} />
+                                        <h3 className="text-[10px] uppercase tracking-wider">Extraction Route</h3>
                                     </div>
-                                    <p className="text-sm text-gray-300 leading-relaxed">{data.plan.safeExitRoute}</p>
+                                    <p className="text-sm text-green-100/80">{data.plan.safeExitRoute}</p>
                                 </div>
 
-                                <div className="bg-slate-800/40 p-3 rounded border border-slate-700">
+                                <div className="bg-red-900/10 p-3 rounded border border-red-900/30">
                                     <div className="flex items-center gap-2 text-red-400 mb-2">
-                                        <AlertTriangle size={18} />
-                                        <h3 className="text-xs font-mono uppercase">Threat Assessment</h3>
+                                        <AlertTriangle size={16} />
+                                        <h3 className="text-[10px] uppercase tracking-wider">Threats</h3>
                                     </div>
-                                    <p className="text-sm text-gray-300 leading-relaxed">{data.plan.hazardSummary}</p>
+                                    <p className="text-sm text-red-100/80">{data.plan.hazardSummary}</p>
                                 </div>
                             </div>
                         </div>
                     ) : (
-                        <div className="h-full flex flex-col items-center justify-center text-slate-500 gap-4 min-h-[200px]">
-                            <div className="w-16 h-16 border-4 border-slate-700 border-t-blue-500 rounded-full animate-spin"></div>
-                            <p className="font-mono text-sm animate-pulse">ANALYZING ENVIRONMENT SCENE...</p>
+                        <div className="h-full flex flex-col items-center justify-center text-slate-600 gap-4">
+                            <div className="font-mono text-xs flex flex-col items-center gap-1">
+                                <span className="animate-pulse">ANALYZING SCENE GEOMETRY...</span>
+                                <span className="animate-pulse delay-75">CALCULATING EXIT VECTORS...</span>
+                                <span className="animate-pulse delay-150">DETECTING HAZARDS...</span>
+                            </div>
                         </div>
                     )}
                 </div>
             </div>
 
-            {/* Event Log with Thumbnails */}
-            <div className="bg-slate-800/80 p-3 rounded-lg border border-slate-700 h-64 flex flex-col shrink-0">
-                <h3 className="text-gray-400 font-mono text-xs mb-2 flex items-center gap-2 border-b border-slate-700 pb-2">
-                  <Radio size={14} className="text-green-500" /> SYSTEM_LOG
+            {/* Transcript / Terminal Log */}
+            <div className="bg-black p-3 rounded border border-slate-800 h-48 flex flex-col shrink-0">
+                <h3 className="text-slate-500 text-[10px] mb-2 flex items-center gap-2 border-b border-slate-900 pb-2">
+                  <Radio size={12} className="text-yellow-500" /> TRANSCRIPT_LOG
                 </h3>
-                <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto space-y-1 font-mono text-[10px] pr-2 custom-scrollbar">
+                   {data.transcript.map((line, i) => (
+                      <div key={i} className="text-green-500/80 break-words border-l border-green-900/30 pl-2">
+                        <span className="text-slate-600 mr-2">[{new Date().toLocaleTimeString()}]</span>
+                        {line}
+                      </div>
+                   ))}
                    {data.eventLog.map((event) => (
-                      <div key={event.id} className="flex gap-2 text-xs font-mono items-start bg-black/20 p-2 rounded">
-                         {event.snapshot && (
-                            <img src={event.snapshot} alt="Evidence" className="w-12 h-12 object-cover rounded border border-slate-600 shrink-0" />
-                         )}
-                         <div className="flex flex-col">
-                            <div className="flex gap-2">
-                                <span className="text-slate-500">{new Date(event.timestamp).toLocaleTimeString()}</span>
-                                <span className={`${event.type === 'HAZARD_DETECTED' ? 'text-red-400' : 'text-green-400'} font-bold`}>
-                                    [{event.type}]
-                                </span>
-                            </div>
-                            <span className="text-slate-300 mt-1">{event.description}</span>
-                         </div>
+                      <div key={event.id} className="text-blue-400/80 break-words border-l border-blue-900/30 pl-2">
+                        <span className="text-slate-600 mr-2">[{new Date(event.timestamp).toLocaleTimeString()}]</span>
+                        EVENT: {event.description}
                       </div>
                    ))}
                 </div>
@@ -220,13 +192,13 @@ export const GuardianMode: React.FC<Props> = ({ data, videoStream, onExit }) => 
              {/* Share Link Footer */}
             <button 
                 onClick={copyLink}
-                className="w-full bg-slate-900 border border-slate-700 p-3 rounded-lg group hover:border-green-500 transition-colors flex items-center justify-between shrink-0"
+                className="w-full bg-slate-900 border border-slate-800 p-3 rounded group hover:bg-slate-800 transition-colors flex items-center justify-between shrink-0"
             >
                 <div className="flex items-center gap-3 overflow-hidden">
-                    <Share2 size={16} className="text-green-500 shrink-0" />
-                    <span className="text-xs text-gray-400 font-mono truncate">SECURE LINK: <span className="text-white">{link}</span></span>
+                    <Share2 size={16} className="text-blue-500 shrink-0" />
+                    <span className="text-xs text-slate-400 truncate">ACCESS_KEY: <span className="text-slate-200">{link}</span></span>
                 </div>
-                {copied ? <Check size={16} className="text-green-500 shrink-0"/> : <Copy size={16} className="text-gray-500 group-hover:text-white shrink-0"/>}
+                {copied ? <Check size={16} className="text-green-500 shrink-0"/> : <Copy size={16} className="text-slate-600 group-hover:text-white shrink-0"/>}
             </button>
          </div>
 
