@@ -129,9 +129,10 @@ export const GestureLayer: React.FC<Props> = ({
   }
 
   // Transparent Gesture Layer for Standard Mode
+  // Z-Index set to 40. This allows Z-60 (Header) and Z-70 (Debug) to sit on top and receive clicks.
   return (
     <div 
-      className="absolute inset-0 z-[50]"
+      className="absolute inset-0 z-[40]"
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       // We do NOT block pointer events here so underlying interactive elements still work if precisely clicked,

@@ -13,13 +13,42 @@ const App: React.FC = () => {
   const { state, dispatch, stateRef } = useNeuroState();
   
   // --- UI STATE ---
-  const [apiKey, setApiKey] = useState(process.env.API_KEY || '');
+  // Persist API Key to LocalStorage for better DX
+  const [apiKey, setApiKey] = useState(() => {
+      if (typeof window !== 'undefined') {
+          return localStorage.getItem('NEURO_API_KEY') || process.env.API_KEY || '';
+      }
+      return process.env.API_KEY || '';
+  });
   const [showDebug, setShowDebug] = useState(false);
   const [privacyMode, setPrivacyMode] = useState(false);
   const [isLightTheme, setIsLightTheme] = useState(false);
 
+  // Sync API Key to Storage
+  useEffect(() => {
+      if (apiKey) localStorage.setItem('NEURO_API_KEY', apiKey);
+  }, [apiKey]);
+
   // --- AUDIO FEEDBACK ---
   useAudioFeedback(state);
+
+  // --- AUDIO CONTEXT UNLOCKER ---
+  // Critical for Mobile Safari/Chrome: Resumes AudioContext on first physical interaction
+  useEffect(() => {
+      const unlockAudio = () => {
+          soundEngine.init();
+          soundEngine.getContext()?.resume();
+          // Remove listeners once unlocked
+          document.removeEventListener('touchstart', unlockAudio);
+          document.removeEventListener('click', unlockAudio);
+      };
+      document.addEventListener('touchstart', unlockAudio);
+      document.addEventListener('click', unlockAudio);
+      return () => {
+          document.removeEventListener('touchstart', unlockAudio);
+          document.removeEventListener('click', unlockAudio);
+      };
+  }, []);
 
   // --- THEME ---
   useEffect(() => {
@@ -28,27 +57,8 @@ const App: React.FC = () => {
       metaThemeColor.setAttribute('content', isLightTheme ? '#FFFFFF' : '#000000');
     }
   }, [isLightTheme]);
-
-  // --- AI LOGIC PLACEHOLDER (Need this for sensors to know if connected) ---
-  // We don't have the real isConnected value yet, so we pass a ref or wait.
-  // Actually, we can just pass the value after we initialize the AI hook.
   
   // --- SENSORS & SIDE EFFECTS ---
-  // We need to know connection status for "Shake to Reset" logic
-  // But connection status comes from Gemini Hook. 
-  // To avoid circular dependency, we'll use a local state for connected status that the hook updates?
-  // Easier: NeuroSensors takes `state.mode` which implies connection mostly, but let's pass a boolean.
-  // We will pass `state.mode !== AppMode.OFFLINE` as a proxy or fix the order.
-  
-  // To solve this properly, we instantiate Gemini Hook first? No, Gemini needs camera stream from sensors.
-  // Solution: We split Camera out? No.
-  // We will let Sensors hook take a simple boolean that we pass in.
-  
-  // Actually, let's declare the variable `isConnected` from the future hook result.
-  // Since we can't look into the future, we split the logic.
-  // However, `useNeuroSensors` mainly needs `isConnected` for the Shake action. 
-  // We can pass `state.mode !== AppMode.OFFLINE` which is "effectively" connected for the logic we need.
-
   const sensors = useNeuroSensors(state, dispatch, state.mode !== AppMode.OFFLINE, showDebug);
   
   // --- GEMINI AI INTEGRATION ---
@@ -88,7 +98,8 @@ const App: React.FC = () => {
     } else {
       if (!apiKey) {
         soundEngine.speakSystem("Error. API Key missing.");
-        alert("Please set API_KEY in env or use the debug panel.");
+        alert("Please set API_KEY in settings.");
+        setShowDebug(true); // Auto-open debug menu
         return;
       }
       soundEngine.speakSystem("Connecting to Gemini Live.");

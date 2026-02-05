@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Activity, ShieldAlert } from 'lucide-react';
 import { AppMode } from '../types';
@@ -12,8 +13,9 @@ interface Props {
 export const StatusHeader: React.FC<Props> = ({ mode, isConnected, privacyMode, onActivateGuardian }) => {
     if (mode === AppMode.GUARDIAN || privacyMode) return null;
 
+    // Z-Index elevated to 60 to sit ABOVE the GestureLayer (z-40)
     return (
-        <div className="absolute top-0 left-0 w-full p-2 pt-safe z-[40] flex justify-between pointer-events-none items-start">
+        <div className="absolute top-0 left-0 w-full p-2 pt-safe z-[60] flex justify-between pointer-events-none items-start">
            <div 
               className={`flex items-center gap-2 px-3 py-2 md:px-4 md:py-3 rounded-xl border-4 ${isConnected ? 'border-[#FFD600] bg-black text-[#FFD600]' : 'border-gray-600 bg-neuro-ui text-gray-400'} mt-2 ml-2 transition-all duration-300`}
               role="status"
