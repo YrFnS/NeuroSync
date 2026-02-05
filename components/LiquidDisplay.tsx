@@ -32,13 +32,10 @@ export const LiquidDisplay: React.FC<Props> = ({ state, videoStream, onExitGuard
   const isDanger = state.mode === AppMode.DANGER;
 
   // Safe area padding for modes that coexist with global UI (Header/Footer)
-  // Guardian mode takes over screen, so no padding needed.
-  // Danger mode is a full screen alert, but needs to sit under header if visible, or over it. 
-  // Danger mode is usually high Z, but here it's part of the flow.
   const containerClass = isGuardian ? "w-full h-full" : "w-full h-full pt-28 pb-40 px-4";
 
   return (
-    <div className="w-full h-full relative overflow-hidden bg-black liquid-transition">
+    <div className="w-full h-full relative overflow-hidden bg-neuro-bg liquid-transition">
       
       {/* Modes Content */}
       <div className={`relative z-10 ${containerClass} flex flex-col`}>

@@ -6,7 +6,7 @@ import { useLiveSession } from './hooks/useLiveSession';
 import { useGeolocation } from './hooks/useGeolocation';
 import { useBattery } from './hooks/useBattery';
 import { soundEngine } from './utils/soundEngine';
-import { Power, Activity, ShieldAlert, Settings, AlertOctagon } from 'lucide-react';
+import { Power, Activity, ShieldAlert, Settings, AlertOctagon, Sun, Moon } from 'lucide-react';
 
 const loadMemory = (): EnvironmentalEvent[] => {
   try {
@@ -101,9 +101,21 @@ const App: React.FC = () => {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [apiKey, setApiKey] = useState(process.env.API_KEY || '');
   const [showDebug, setShowDebug] = useState(false);
+  
+  // Default to Dark Mode (false) as it is better for photophobia and camera usage
+  const [isLightTheme, setIsLightTheme] = useState(false);
+  
   const { location } = useGeolocation();
   const { level: batteryLevel, charging: isCharging, supported: batterySupported } = useBattery();
   
+  // Update System Chrome Color
+  useEffect(() => {
+    const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+    if (metaThemeColor) {
+      metaThemeColor.setAttribute('content', isLightTheme ? '#FFFFFF' : '#000000');
+    }
+  }, [isLightTheme]);
+
   // App Mount Announcement
   useEffect(() => {
      // Small delay to ensure browser interaction policies are met or waiting for user first interaction
@@ -256,13 +268,13 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="h-[100dvh] w-screen bg-black text-white overflow-hidden flex flex-col font-sans relative">
+    <div className={`h-[100dvh] w-screen overflow-hidden flex flex-col font-sans relative transition-colors duration-300 ${isLightTheme ? 'theme-light bg-neuro-bg text-neuro-text' : 'bg-black text-white'}`}>
       
       {/* Header - Safe Area Top - HIDDEN IN GUARDIAN MODE */}
       {state.mode !== AppMode.GUARDIAN && (
         <div className="absolute top-0 left-0 w-full p-2 pt-safe z-50 flex justify-between pointer-events-none items-start">
            <div 
-              className={`pointer-events-auto flex items-center gap-2 px-3 py-2 md:px-4 md:py-3 rounded-xl border-4 ${isConnected ? 'border-[#FFD600] bg-black text-[#FFD600]' : 'border-gray-600 bg-gray-900 text-gray-400'} mt-2 ml-2 transition-all duration-300`}
+              className={`pointer-events-auto flex items-center gap-2 px-3 py-2 md:px-4 md:py-3 rounded-xl border-4 ${isConnected ? 'border-[#FFD600] bg-black text-[#FFD600]' : 'border-gray-600 bg-neuro-ui text-gray-400'} mt-2 ml-2 transition-all duration-300`}
               role="status"
               aria-live="polite"
            >
@@ -297,7 +309,7 @@ const App: React.FC = () => {
       {isLowBattery && <BatteryWarning level={batteryLevel} />}
 
       {/* Main Content */}
-      <main className="flex-1 relative z-0 h-full w-full bg-black" role="main" aria-live="polite">
+      <main className="flex-1 relative z-0 h-full w-full bg-neuro-bg" role="main" aria-live="polite">
          <LiquidDisplay 
             state={state} 
             videoStream={videoStream} 
@@ -327,7 +339,7 @@ const App: React.FC = () => {
       <div className="fixed top-32 right-4 z-[60]">
           <button 
             onClick={() => setShowDebug(!showDebug)} 
-            className="bg-black/50 p-3 rounded-full text-gray-500 hover:text-white border-2 border-gray-700 backdrop-blur-sm"
+            className="bg-neuro-ui p-3 rounded-full text-gray-500 hover:text-neuro-text border-2 border-gray-700 backdrop-blur-sm"
             aria-label="Open Debug Menu"
           >
             <Settings size={24} strokeWidth={3} />
@@ -340,6 +352,22 @@ const App: React.FC = () => {
             <div className="flex justify-between items-center mb-4 border-b-4 border-black pb-2">
                 <h3 className="uppercase text-xl">Simulator</h3>
                 <button onClick={() => setShowDebug(false)} className="bg-black text-white p-2 rounded">CLOSE</button>
+            </div>
+            
+            <div className="mb-6 flex justify-between items-center bg-gray-100 p-3 rounded border-2 border-black">
+                <div className="flex items-center gap-2">
+                   {isLightTheme ? <Sun size={20} /> : <Moon size={20} />}
+                   <span>Theme: {isLightTheme ? 'Light (Astigmatism)' : 'Dark (Photophobia)'}</span>
+                </div>
+                <button 
+                    onClick={() => {
+                        setIsLightTheme(!isLightTheme);
+                        soundEngine.playModeSwitch();
+                    }} 
+                    className="bg-black text-white px-3 py-1 rounded uppercase text-xs"
+                >
+                    Toggle
+                </button>
             </div>
             
             <div className="grid grid-cols-2 gap-3 mb-4">
