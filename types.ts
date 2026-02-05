@@ -9,6 +9,8 @@ export enum AppMode {
   GUARDIAN = 'GUARDIAN' // The "Help" mode
 }
 
+export type VisualFilter = 'NONE' | 'HIGH_CONTRAST' | 'INVERTED' | 'ACHROMATOPSIA';
+
 export interface NavigationData {
   direction: 'STRAIGHT' | 'LEFT' | 'RIGHT' | 'STOP' | 'CROSSWALK';
   distance: string; // e.g. "5m"
@@ -58,6 +60,7 @@ export interface DetectedObject {
 
 export interface NeuroState {
   mode: AppMode;
+  visualFilter: VisualFilter;
   navData?: NavigationData;
   readData?: ReadingData;
   scanData?: ScanningData;
@@ -79,4 +82,5 @@ export type ActionType =
   | { type: 'LOAD_HISTORY'; payload: EnvironmentalEvent[] }
   | { type: 'UPDATE_LOCATION'; payload: { lat: number; lng: number } }
   | { type: 'SET_STREAMING'; payload: boolean }
-  | { type: 'UPDATE_OFFLINE_DETECTIONS'; payload: DetectedObject[] };
+  | { type: 'UPDATE_OFFLINE_DETECTIONS'; payload: DetectedObject[] }
+  | { type: 'CYCLE_FILTER' };

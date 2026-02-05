@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState, memo, Suspense } from 'react';
-import { AppMode, NeuroState } from '../types';
+import { AppMode, NeuroState, VisualFilter } from '../types';
 import { NavigationMode } from './modes/NavigationMode';
 import { ReadingMode } from './modes/ReadingMode';
 import { ScanningMode } from './modes/ScanningMode';
@@ -32,6 +32,20 @@ const ModeLoader = () => (
     </div>
 );
 
+// Bionic Filter Styles
+const getFilterStyle = (filter: VisualFilter) => {
+    switch (filter) {
+        case 'HIGH_CONTRAST':
+            return { filter: 'contrast(200%) saturate(200%) brightness(120%)' };
+        case 'INVERTED':
+            return { filter: 'invert(100%) hue-rotate(180deg)' };
+        case 'ACHROMATOPSIA':
+            return { filter: 'grayscale(100%) contrast(150%)' };
+        default:
+            return {};
+    }
+};
+
 export const LiquidDisplay: React.FC<Props> = ({ state, videoStream, onExitGuardian }) => {
   const [showMemoryToast, setShowMemoryToast] = useState<string | null>(null);
 
@@ -51,7 +65,7 @@ export const LiquidDisplay: React.FC<Props> = ({ state, videoStream, onExitGuard
   const containerClass = (isGuardian || isOffline) ? "w-full h-full" : "w-full h-full pt-28 pb-40 px-4";
 
   return (
-    <div className="w-full h-full relative overflow-hidden bg-neuro-bg liquid-transition">
+    <div className="w-full h-full relative overflow-hidden bg-neuro-bg liquid-transition" style={getFilterStyle(state.visualFilter)}>
       
       <div className={`relative z-10 ${containerClass} flex flex-col`}>
         <Suspense fallback={<ModeLoader />}>
@@ -84,6 +98,14 @@ export const LiquidDisplay: React.FC<Props> = ({ state, videoStream, onExitGuard
         </div>
       )}
       
+      {state.visualFilter !== 'NONE' && (
+          <div className="absolute top-4 right-4 z-50 pointer-events-none opacity-50">
+              <span className="bg-black text-white px-2 py-1 text-[10px] font-mono border border-white/20 rounded">
+                  FILTER: {state.visualFilter}
+              </span>
+          </div>
+      )}
+
     </div>
   );
 };

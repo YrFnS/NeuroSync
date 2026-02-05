@@ -1,11 +1,15 @@
+
 import React, { useRef, useState, useEffect } from 'react';
 import { EyeOff, Eye } from 'lucide-react';
 import { soundEngine } from '../utils/soundEngine';
 
 interface Props {
   onDoubleTap: () => void;
+  onTripleTap: () => void;
   onLongPress: () => void;
   onSingleTap: () => void;
+  onSwipeLeft: () => void;
+  onSwipeRight: () => void;
   isConnected: boolean;
   privacyMode: boolean;
   setPrivacyMode: (val: boolean) => void;
@@ -13,24 +17,28 @@ interface Props {
 
 export const GestureLayer: React.FC<Props> = ({ 
   onDoubleTap, 
+  onTripleTap,
   onLongPress, 
   onSingleTap,
+  onSwipeLeft,
+  onSwipeRight,
   isConnected,
   privacyMode,
   setPrivacyMode 
 }) => {
   const [touchStart, setTouchStart] = useState<number>(0);
-  const [touchEndY, setTouchEndY] = useState<number>(0);
+  const [touchStartX, setTouchStartX] = useState<number>(0);
   const [touchStartY, setTouchStartY] = useState<number>(0);
   const timerRef = useRef<number | null>(null);
   const longPressTriggered = useRef<boolean>(false);
-  const doubleTapTimer = useRef<number | null>(null);
-  const lastTapTime = useRef<number>(0);
+  const tapCount = useRef<number>(0);
+  const tapTimer = useRef<number | null>(null);
   const touchCount = useRef<number>(0);
 
   // Handle Touch Start
   const handleTouchStart = (e: React.TouchEvent) => {
     setTouchStart(Date.now());
+    setTouchStartX(e.touches[0].clientX);
     setTouchStartY(e.touches[0].clientY);
     longPressTriggered.current = false;
     touchCount.current = e.touches.length;
@@ -56,32 +64,48 @@ export const GestureLayer: React.FC<Props> = ({
     const now = Date.now();
     const touchDuration = now - touchStart;
     const isTap = touchDuration < 250;
+    
+    // Calculate Swipes
+    const deltaX = e.changedTouches[0].clientX - touchStartX;
     const deltaY = e.changedTouches[0].clientY - touchStartY;
+    const isSwipe = Math.abs(deltaX) > 80 || Math.abs(deltaY) > 80;
 
-    // 2 Finger Swipe Down for Privacy Curtain
-    if (touchCount.current === 2 && deltaY > 100) {
-        setPrivacyMode(!privacyMode);
-        soundEngine.speakSystem(privacyMode ? "Curtain open." : "Curtain closed. Screen is black.");
-        if (navigator.vibrate) navigator.vibrate(50);
-        return;
+    // 2 Finger Swipe Logic
+    if (touchCount.current === 2 && isSwipe) {
+        // Vertical Swipe (Privacy)
+        if (Math.abs(deltaY) > 80 && Math.abs(deltaX) < 60) {
+            setPrivacyMode(!privacyMode);
+            soundEngine.speakSystem(privacyMode ? "Curtain open." : "Curtain closed. Screen is black.");
+            if (navigator.vibrate) navigator.vibrate(50);
+            return;
+        }
+        // Horizontal Swipe (Filters)
+        if (Math.abs(deltaX) > 80 && Math.abs(deltaY) < 60) {
+            if (deltaX > 0) {
+                onSwipeRight();
+            } else {
+                onSwipeLeft();
+            }
+            if (navigator.vibrate) navigator.vibrate(20);
+            return;
+        }
     }
 
-    if (isTap) {
-      const timeSinceLastTap = now - lastTapTime.current;
+    if (isTap && !isSwipe) {
+      tapCount.current += 1;
       
-      if (timeSinceLastTap < 300 && timeSinceLastTap > 0) {
-        // DOUBLE TAP DETECTED
-        if (doubleTapTimer.current) clearTimeout(doubleTapTimer.current);
-        onDoubleTap();
-        lastTapTime.current = 0;
-      } else {
-        // Potential Single Tap
-        lastTapTime.current = now;
-        doubleTapTimer.current = window.setTimeout(() => {
-            onSingleTap(); // Fire single tap if no second tap comes
-            lastTapTime.current = 0;
-        }, 350);
-      }
+      if (tapTimer.current) clearTimeout(tapTimer.current);
+
+      tapTimer.current = window.setTimeout(() => {
+          if (tapCount.current === 1) {
+              onSingleTap();
+          } else if (tapCount.current === 2) {
+              onDoubleTap();
+          } else if (tapCount.current === 3) {
+              onTripleTap();
+          }
+          tapCount.current = 0;
+      }, 400); // Slightly longer window to catch triple taps
     }
   };
 

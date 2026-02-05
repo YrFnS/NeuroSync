@@ -1,3 +1,4 @@
+
 // A pure Web Audio API synthesizer for sci-fi interface sounds
 // Now with 3D Spatial Audio (HRTF), Native TTS, and Audio Analysis
 
@@ -11,6 +12,9 @@ class SoundEngine {
     private droneGain: GainNode | null = null;
     private synth: SpeechSynthesis = window.speechSynthesis;
     private duckTimer: number | null = null;
+    
+    // Memory for Echo Feature
+    private lastSpokenPhrase: string | null = null;
   
     constructor() {
       // Defer initialization
@@ -89,6 +93,10 @@ class SoundEngine {
 
     public speakSystem(text: string) {
         if (!this.synth) return;
+        
+        // Save for Echo/Replay
+        this.lastSpokenPhrase = text;
+
         this.duck();
 
         if (this.synth.speaking) {
@@ -100,6 +108,15 @@ class SoundEngine {
         utterance.volume = 1.0;
         utterance.onend = () => { this.unduck(); };
         this.synth.speak(utterance);
+    }
+
+    public repeatLast() {
+        if (this.lastSpokenPhrase) {
+            this.playModeSwitch(); // Acknowledge sound
+            this.speakSystem(this.lastSpokenPhrase);
+        } else {
+            this.playCompassTick(); // Error/Empty sound
+        }
     }
 
     /**
@@ -150,14 +167,9 @@ class SoundEngine {
 
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
-        osc.connect(gain);
-        gain.connect(this.sfxGain); // Route through panner via sfxGain connection logic? 
-        // Note: Earlier structure connected panner to sfxGain. 
-        // We need to connect the osc -> gain -> panner.
-        // Let's fix the routing for momentary SFX.
         
-        // Re-routing for dynamic panner usage
-        gain.disconnect();
+        // Routing fix
+        osc.connect(gain);
         if (this.panner) gain.connect(this.panner); 
         else gain.connect(this.sfxGain);
 
@@ -197,6 +209,29 @@ class SoundEngine {
       osc.stop(this.ctx.currentTime + 0.3);
     }
 
+    public playFilterSwitch() {
+        this.init();
+        if (!this.ctx || !this.sfxGain) return;
+        this.setAzimuth(0, 0.5);
+    
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        
+        osc.connect(gain);
+        if (this.panner) gain.connect(this.panner); else gain.connect(this.sfxGain);
+    
+        // Mechanical click sound
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(1200, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(50, this.ctx.currentTime + 0.1);
+    
+        gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+    
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.1);
+    }
+
     public playReset() {
         this.init();
         if (!this.ctx || !this.masterGain) return;
@@ -204,7 +239,6 @@ class SoundEngine {
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
         osc.connect(gain);
-        // Reset sound bypasses panner, goes to master
         gain.connect(this.masterGain);
 
         osc.type = 'sawtooth';

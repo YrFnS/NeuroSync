@@ -1,9 +1,11 @@
+
 import { useReducer, useEffect, useRef } from 'react';
-import { NeuroState, ActionType, EnvironmentalEvent, AppMode } from '../types';
+import { NeuroState, ActionType, EnvironmentalEvent, AppMode, VisualFilter } from '../types';
 import { memoryStore } from '../utils/memoryStore';
 
 const initialState: NeuroState = {
   mode: AppMode.IDLE,
+  visualFilter: 'NONE',
   guardianData: { active: false, transcript: [], eventLog: [], locationHistory: [] },
   isAudioStreaming: false,
 };
@@ -94,6 +96,11 @@ function reducer(state: NeuroState, action: ActionType): NeuroState {
       };
     case 'SET_STREAMING':
       return { ...state, isAudioStreaming: action.payload };
+    case 'CYCLE_FILTER':
+      const filters: VisualFilter[] = ['NONE', 'HIGH_CONTRAST', 'INVERTED', 'ACHROMATOPSIA'];
+      const currentIndex = filters.indexOf(state.visualFilter);
+      const nextIndex = (currentIndex + 1) % filters.length;
+      return { ...state, visualFilter: filters[nextIndex] };
     default:
       return state;
   }
