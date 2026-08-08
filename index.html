@@ -1,55 +1,64 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0, viewport-fit=cover" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0, viewport-fit=cover"
+    />
     <meta name="theme-color" content="#000000" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
     <meta name="description" content="AI-powered accessibility interface" />
-    
+
     <title>NeuroSync</title>
-    
+
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="apple-touch-icon" href="/icon.svg" />
-    
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
         theme: {
           extend: {
             colors: {
-              'neuro-bg': 'var(--bg-primary)',
-              'neuro-text': 'var(--text-primary)',
-              'neuro-ui': 'var(--bg-ui)',
-              'signal-green': 'var(--signal-green)',
-              'signal-red': 'var(--signal-red)',
-            }
-          }
-        }
-      }
+              "neuro-bg": "var(--bg-primary)",
+              "neuro-text": "var(--text-primary)",
+              "neuro-ui": "var(--bg-ui)",
+              "signal-green": "var(--signal-green)",
+              "signal-red": "var(--signal-red)",
+            },
+          },
+        },
+      };
     </script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-     crossorigin=""/>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
     <style>
       /* ACCESSIBILITY FONT: Atkinson Hyperlegible (Braille Institute) */
-      @import url('https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&display=swap');
-      @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap');
+      @import url("https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&display=swap");
+      @import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;800&display=swap");
 
       :root {
         /* PALETTE: DEFAULT DARK (VOID BLACK) */
         color-scheme: dark; /* Tells browser to use dark scrollbars/inputs */
-        
-        --safety-yellow: #FFD600;
-        --signal-orange: #FF4D00;
-        --signal-green: #00FF94;
-        --signal-red: #FF1F1F;
-        --cobalt-blue: #0047AB;
-        
+
+        --safety-yellow: #ffd600;
+        --signal-orange: #ff4d00;
+        --signal-green: #00ff94;
+        --signal-red: #ff1f1f;
+        --cobalt-blue: #0047ab;
+
         --bg-primary: #000000;
-        --text-primary: #FFFFFF;
+        --text-primary: #ffffff;
         --bg-ui: #111111;
         --border-ui: #333333;
       }
@@ -57,27 +66,31 @@
       /* PALETTE: LIGHT THEME (PAPER WHITE) */
       .theme-light {
         color-scheme: light; /* Tells browser to use light scrollbars/inputs */
-        
-        --bg-primary: #FFFFFF;
+
+        --bg-primary: #ffffff;
         --text-primary: #000000;
-        --bg-ui: #F3F4F6;
-        --border-ui: #E5E7EB;
+        --bg-ui: #f3f4f6;
+        --border-ui: #e5e7eb;
       }
 
       body {
         background-color: var(--bg-primary);
         color: var(--text-primary);
-        font-family: 'Atkinson Hyperlegible', sans-serif;
+        font-family: "Atkinson Hyperlegible", sans-serif;
         overscroll-behavior: none;
         overflow: hidden; /* Prevent scroll */
         height: 100dvh;
         width: 100vw;
-        transition: background-color 0.3s ease, color 0.3s ease;
+        transition:
+          background-color 0.3s ease,
+          color 0.3s ease;
       }
 
       /* Utilities for High Contrast UI */
       .liquid-transition {
-        transition: background-color 0.4s ease, color 0.4s ease;
+        transition:
+          background-color 0.4s ease,
+          color 0.4s ease;
       }
 
       /* Solid, bold borders for low vision visibility */
@@ -90,24 +103,38 @@
       }
 
       @keyframes pulse-heavy {
-        0%, 100% { transform: scale(1); opacity: 1; }
-        50% { transform: scale(1.02); opacity: 0.9; }
+        0%,
+        100% {
+          transform: scale(1);
+          opacity: 1;
+        }
+        50% {
+          transform: scale(1.02);
+          opacity: 0.9;
+        }
       }
-      
+
       /* Flash effect for danger */
       .flash-danger {
         animation: flash-red 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
       }
 
       @keyframes flash-red {
-        0%, 100% { background-color: var(--signal-red); color: white; }
-        50% { background-color: black; color: var(--signal-red); }
+        0%,
+        100% {
+          background-color: var(--signal-red);
+          color: white;
+        }
+        50% {
+          background-color: black;
+          color: var(--signal-red);
+        }
       }
 
       /* Leaflet Customization for High Contrast */
       .leaflet-container {
         background: #000;
-        font-family: 'Atkinson Hyperlegible', sans-serif;
+        font-family: "Atkinson Hyperlegible", sans-serif;
       }
       .leaflet-popup-content-wrapper {
         background: #000;
@@ -119,9 +146,9 @@
       .leaflet-popup-tip {
         background: var(--signal-green);
       }
-      
+
       .font-mono {
-        font-family: 'JetBrains Mono', monospace;
+        font-family: "JetBrains Mono", monospace;
       }
 
       /* Custom Scrollbar hidden for cleaner UI but scrollable */
@@ -130,32 +157,23 @@
         background: transparent;
       }
     </style>
-  <script type="importmap">
-{
-  "imports": {
-    "react/": "https://esm.sh/react@^19.2.4/",
-    "react": "https://esm.sh/react@^19.2.4",
-    "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.39.0",
-    "leaflet": "https://esm.sh/leaflet@1.9.4",
-    "@tensorflow/tfjs": "https://esm.sh/@tensorflow/tfjs@4.17.0",
-    "@tensorflow-models/coco-ssd": "https://esm.sh/@tensorflow-models/coco-ssd@2.2.3"
-  }
-}
-</script>
-</head>
+    <script type="importmap">
+      {
+        "imports": {
+          "react/": "https://esm.sh/react@^19.2.4/",
+          "react": "https://esm.sh/react@^19.2.4",
+          "lucide-react": "https://esm.sh/lucide-react@^0.563.0",
+          "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+          "@google/genai": "https://esm.sh/@google/genai@^1.39.0",
+          "leaflet": "https://esm.sh/leaflet@1.9.4",
+          "@tensorflow/tfjs": "https://esm.sh/@tensorflow/tfjs@4.17.0",
+          "@tensorflow-models/coco-ssd": "https://esm.sh/@tensorflow-models/coco-ssd@2.2.3"
+        }
+      }
+    </script>
+  </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/service-worker.js')
-            .then(reg => console.log('SW registered'))
-            .catch(err => console.log('SW registration failed', err));
-        });
-      }
-    </script>
   </body>
 </html>
