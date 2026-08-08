@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 const sentinel = "NEUROSYNC_MUST_NOT_REACH_THE_BROWSER";
@@ -26,6 +26,16 @@ if (files.some((file) => readFileSync(file).includes(sentinel))) {
 	throw new Error("Provider credential was bundled into dist");
 }
 
+let manifest;
+try {
+	manifest = JSON.parse(readFileSync("dist/manifest.json", "utf8"));
+} catch (error) {
+	throw new Error("Production web manifest is invalid", { cause: error });
+}
+if (!manifest.icons.every(({ src }) => existsSync(path.join("dist", src)))) {
+	throw new Error("Web manifest references a missing icon");
+}
+
 process.stdout.write(
-	"Provider credential is absent from the production bundle.\n",
+	"Provider credential is absent and manifest assets exist in the production bundle.\n",
 );
