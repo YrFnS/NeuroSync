@@ -10,7 +10,12 @@ const build = spawnSync(
 	process.execPath,
 	[npmCli, "run", "build", "--silent"],
 	{
-		env: { ...process.env, API_KEY: sentinel, GEMINI_API_KEY: sentinel },
+		env: {
+			...process.env,
+			API_KEY: sentinel,
+			GEMINI_API_KEY: sentinel,
+			OPENROUTER_API_KEY: sentinel,
+		},
 		stdio: "inherit",
 	},
 );

@@ -1,7 +1,7 @@
 
-import React from 'react';
+import type React from 'react';
 import { AlertOctagon } from 'lucide-react';
-import { AppMode, NeuroState, ActionType } from '../types';
+import { AppMode, type NeuroState, type ActionType, type AIProvider } from '../types';
 import { LiquidDisplay } from './LiquidDisplay';
 import { BatteryWarning } from './BatteryWarning';
 import { DebugMenu } from './DebugMenu';
@@ -24,8 +24,14 @@ interface Props {
     onToggleConnection: () => void;
     
     // UI State
-    apiKey: string;
-    setApiKey: (key: string) => void;
+    provider: AIProvider;
+    setProvider: (provider: AIProvider) => void;
+    geminiApiKey: string;
+    setGeminiApiKey: (key: string) => void;
+    openRouterApiKey: string;
+    setOpenRouterApiKey: (key: string) => void;
+    openRouterModelId: string;
+    setOpenRouterModelId: (modelId: string) => void;
     showDebug: boolean;
     setShowDebug: (val: boolean) => void;
     privacyMode: boolean;
@@ -43,8 +49,14 @@ export const NeuroInterface: React.FC<Props> = ({
     isConnected,
     error,
     onToggleConnection,
-    apiKey,
-    setApiKey,
+    provider,
+    setProvider,
+    geminiApiKey,
+    setGeminiApiKey,
+    openRouterApiKey,
+    setOpenRouterApiKey,
+    openRouterModelId,
+    setOpenRouterModelId,
     showDebug,
     setShowDebug,
     privacyMode,
@@ -140,8 +152,14 @@ export const NeuroInterface: React.FC<Props> = ({
                 onClose={() => setShowDebug(false)}
                 onToggleDebug={() => setShowDebug(!showDebug)}
                 dispatch={dispatch}
-                apiKey={apiKey}
-                setApiKey={setApiKey}
+                provider={provider}
+                setProvider={setProvider}
+                geminiApiKey={geminiApiKey}
+                setGeminiApiKey={setGeminiApiKey}
+                openRouterApiKey={openRouterApiKey}
+                setOpenRouterApiKey={setOpenRouterApiKey}
+                openRouterModelId={openRouterModelId}
+                setOpenRouterModelId={setOpenRouterModelId}
                 isLightTheme={isLightTheme}
                 toggleTheme={toggleTheme}
             />

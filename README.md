@@ -2,7 +2,7 @@
 
 > "The world is designed for sight. We are giving it a voice."
 
-**NeuroSync** is an active, multimodal AI agent designed specifically for the 285 million visually impaired people worldwide. Unlike traditional accessibility tools that are reactive (wait for a photo click), NeuroSync uses the **Gemini Multimodal Live API** to process continuous video and audio streams, proactively understanding context and adapting the interface in real-time.
+**NeuroSync** is an active, multimodal AI agent designed specifically for the 285 million visually impaired people worldwide. Unlike traditional accessibility tools that are reactive (wait for a photo click), NeuroSync supports browser-local BYOK access to **Gemini Multimodal Live** for continuous video/audio and **OpenRouter** for user-selected chat models.
 
 ---
 
@@ -60,7 +60,7 @@ A safety net for when AI isn't enough.
 
 Since the user may not see the screen, the entire app is controlled via a **Gesture Layer**:
 
-* **Double Tap Screen**: Connect / Disconnect from AI.
+* **Double Tap Screen**: Open OpenRouter AI settings or connect/disconnect Gemini Live.
 * **Shake Device**: RESET interface (Emergency exit from any mode to IDLE).
 * **Two-Finger Swipe Down**: Toggle Privacy Curtain (Blacks out screen for privacy while keeping AI active).
 * **Long Press (1.2s)**: Trigger SOS / Guardian Mode.
@@ -71,7 +71,7 @@ Since the user may not see the screen, the entire app is controlled via a **Gest
 ## 🛠 Technical Stack
 
 * **Frontend**: React 19, Tailwind CSS.
-* **AI Model**: Google Gemini 2.5 Flash (Multimodal Live API) via WebSockets.
+* **AI Providers**: Browser-local BYOK for Gemini Live multimodal sessions or user-selected OpenRouter chat models.
 * **Audio**: Native Web Audio API (Oscillators/GainNodes) for synthesizer-based feedback with Audio Ducking.
 * **Maps**: Leaflet.js with Dark Mode tiles.
 * **State Management**: React `useReducer` for complex multimodal state transitions.
@@ -85,9 +85,10 @@ Since the user may not see the screen, the entire app is controlled via a **Gest
     npm install
     ```
 
-3. **API Key Configuration**:
-    * Enter your key at runtime: tap the Settings/Gear icon in the top right to open the simulator settings.
-    * Provider credentials are stored only in your browser and are never bundled during deployment.
+3. **AI Configuration**:
+    * Tap the Settings/Gear icon and choose OpenRouter BYOK or Gemini Live BYOK.
+    * OpenRouter loads its live model catalog; search it and explicitly select a model, or enter an exact model ID manually.
+    * Provider credentials remain only in browser storage and are never bundled during deployment.
 4. Run the development server:
 
     ```bash

@@ -1,4 +1,6 @@
 
+export type AIProvider = 'openrouter' | 'gemini';
+
 export enum AppMode {
   OFFLINE = 'OFFLINE', // New fallback mode
   IDLE = 'IDLE',

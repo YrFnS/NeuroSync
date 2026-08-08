@@ -1,12 +1,13 @@
 import type React from "react";
 import { useState, useEffect } from "react";
-import { AppMode } from "./types";
+import { AppMode, type AIProvider } from "./types";
 import { useNeuroState } from "./hooks/useNeuroState";
 import { useAudioFeedback } from "./hooks/useAudioFeedback";
 import { useNeuroSensors } from "./hooks/useNeuroSensors";
 import { useGeminiIntegration } from "./hooks/useGeminiIntegration";
 import { NeuroInterface } from "./components/NeuroInterface";
 import { soundEngine } from "./utils/soundEngine";
+import { readOpenRouterSettings, writeOpenRouterSettings } from "./utils/openRouter";
 
 const App: React.FC = () => {
 	// --- STATE CORE ---
@@ -14,17 +15,35 @@ const App: React.FC = () => {
 
 	// --- UI STATE ---
 	// Provider credentials are user-supplied at runtime and never bundled at build time.
-	const [apiKey, setApiKey] = useState(
+	const [geminiApiKey, setGeminiApiKey] = useState(
 		() => localStorage.getItem("NEURO_API_KEY") || "",
 	);
+	const [openRouterApiKey, setOpenRouterApiKey] = useState(
+		() => readOpenRouterSettings().apiKey,
+	);
+	const [openRouterModelId, setOpenRouterModelId] = useState(
+		() => readOpenRouterSettings().modelId,
+	);
+	const [provider, setProvider] = useState<AIProvider>(() => {
+		const stored = localStorage.getItem("NEURO_AI_PROVIDER");
+		if (stored === "openrouter" || stored === "gemini") return stored;
+		return localStorage.getItem("NEURO_API_KEY") ? "gemini" : "openrouter";
+	});
 	const [showDebug, setShowDebug] = useState(false);
 	const [privacyMode, setPrivacyMode] = useState(false);
 	const [isLightTheme, setIsLightTheme] = useState(false);
 
-	// Sync API Key to Storage
+	// Sync browser-local provider settings.
 	useEffect(() => {
-		if (apiKey) localStorage.setItem("NEURO_API_KEY", apiKey);
-	}, [apiKey]);
+		if (geminiApiKey) localStorage.setItem("NEURO_API_KEY", geminiApiKey);
+		else localStorage.removeItem("NEURO_API_KEY");
+	}, [geminiApiKey]);
+	useEffect(() => {
+		writeOpenRouterSettings({ apiKey: openRouterApiKey, modelId: openRouterModelId });
+	}, [openRouterApiKey, openRouterModelId]);
+	useEffect(() => {
+		localStorage.setItem("NEURO_AI_PROVIDER", provider);
+	}, [provider]);
 
 	// --- AUDIO FEEDBACK ---
 	useAudioFeedback(state);
@@ -76,12 +95,19 @@ const App: React.FC = () => {
 		state,
 		dispatch,
 		stateRef,
-		apiKey,
+		geminiApiKey,
 		sensors.location,
 		sensors.cameraStream,
 	);
 
-	const totalError = sessionError || sensors.cameraError;
+	const totalError = provider === "gemini" ? sessionError || sensors.cameraError : null;
+
+	useEffect(() => {
+		if (provider === "openrouter" && isConnected) {
+			disconnect();
+			dispatch({ type: "SET_MODE", payload: AppMode.OFFLINE });
+		}
+	}, [provider, isConnected, disconnect, dispatch]);
 
 	// --- STARTUP LOGIC ---
 	useEffect(() => {
@@ -90,7 +116,7 @@ const App: React.FC = () => {
 		}
 		const timer = setTimeout(() => {
 			soundEngine.speakSystem(
-				"NeuroSync Online. Double tap screen to connect. Swipe down with two fingers for privacy curtain.",
+				"NeuroSync Online. Double tap for AI settings. Swipe down with two fingers for privacy curtain.",
 			);
 		}, 1000);
 		return () => clearTimeout(timer);
@@ -103,14 +129,21 @@ const App: React.FC = () => {
 
 	// --- CONNECTION TOGGLER ---
 	const toggleConnection = () => {
+		if (provider === "openrouter") {
+			setShowDebug(true);
+			if (!openRouterApiKey) soundEngine.speakSystem("OpenRouter key missing. Enter it in settings.");
+			else if (!openRouterModelId) soundEngine.speakSystem("Select an OpenRouter model in settings.");
+			else soundEngine.speakSystem("OpenRouter ready. Enter a message in settings.");
+			return;
+		}
 		if (isConnected) {
 			soundEngine.speakSystem("Disconnecting. Engaging Offline Cortex.");
 			disconnect();
 			dispatch({ type: "SET_MODE", payload: AppMode.OFFLINE });
 		} else {
-			if (!apiKey) {
-				soundEngine.speakSystem("Error. API Key missing.");
-				alert("Please set API_KEY in settings.");
+			if (!geminiApiKey) {
+				soundEngine.speakSystem("Error. Gemini API key missing.");
+				alert("Please set a Gemini API key in settings.");
 				setShowDebug(true); // Auto-open debug menu
 				return;
 			}
@@ -131,8 +164,14 @@ const App: React.FC = () => {
 			isConnected={isConnected}
 			error={totalError}
 			onToggleConnection={toggleConnection}
-			apiKey={apiKey}
-			setApiKey={setApiKey}
+			provider={provider}
+			setProvider={setProvider}
+			geminiApiKey={geminiApiKey}
+			setGeminiApiKey={setGeminiApiKey}
+			openRouterApiKey={openRouterApiKey}
+			setOpenRouterApiKey={setOpenRouterApiKey}
+			openRouterModelId={openRouterModelId}
+			setOpenRouterModelId={setOpenRouterModelId}
 			showDebug={showDebug}
 			setShowDebug={setShowDebug}
 			privacyMode={privacyMode}
